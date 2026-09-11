@@ -125,10 +125,14 @@ static void mspReadIncoming() {
 
         if (mspParseByte(byte, msg)) {
             // ── Complete MSP message received ───────────────────────────
+            DBG("MSP: received CMD=%u size=%u valid=%d error=%d", 
+                msg.cmd, msg.payloadSize, msg.valid ? 1 : 0, msg.isError ? 1 : 0);
+            
             fcStatusFeed(msg);   // Arm state / voltage / identity
 
             if (msg.cmd == MSP_RC && msg.valid && !msg.isError) {
                 uint16_t value = mspGetRcChannel(msg, settingsGet().auxChannelIndex);
+                DBG("MSP: RC ch[%d] = %d µs", settingsGet().auxChannelIndex, value);
                 recorderFeedRcValue(value);
 
                 // Separate channel toggles the Wi-Fi AP (255 = disabled).
