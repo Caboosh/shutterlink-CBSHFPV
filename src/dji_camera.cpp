@@ -266,7 +266,16 @@ void djiStartScan() {
     // user-initiated Scan button (via camStartUserScan() in camera_manager).
     // When the window closes, djiUpdate() transitions to BLE_DISCONNECTED
     // — the firmware NEVER auto-restarts the scan.
-    pScan->start(5, false);
+    //
+    // MUST pass scanCompleteCb explicitly: `start(5, false)` binds to the
+    // BLOCKING overload (start(duration, is_continue)) which freezes loop()
+    // for the full window and never invokes the completion callback —
+    // leaving scanResults' _scanning flag stuck true, so every later Scan
+    // request is rejected as "already scanning" and no BLE scan ever runs
+    // again until reboot.  The 3-arg overload is non-blocking and fires
+    // scanCompleteCb at window end, which resets the flag via
+    // scanResultsMarkComplete().
+    pScan->start(5, scanCompleteCb, false);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -522,6 +531,23 @@ static void notifyCallback(NimBLERemoteCharacteristic *pChar, uint8_t *pData,
         }
     }
 
+    // Record-control response (flags=0xC0, set=0x02, id=0x02): first
+    // payload byte is the camera's reply code (MEDIA_PROTOCOL.md):
+    //   00 = OK, d8 = resource busy, d9 = wrong state, df = wrong param,
+    //   e3 = bad param, e0 = not supported, silence = receiver missing.
+    if (flags == 0xC0 && cmdSet == 0x02 && cmdId == 0x02 && length >= 12) {
+        uint8_t reply = pData[11];
+        switch (reply) {
+            case 0x00: DBG("DJI: record command OK"); break;
+            case 0xd8: DBG("DJI: record cmd: resource not ready"); break;
+            case 0xd9: DBG("DJI: record cmd: wrong state (already rec?)"); break;
+            case 0xdf: DBG("DJI: record cmd: wrong parameter"); break;
+            case 0xe3: DBG("DJI: record cmd: bad/missing parameter"); break;
+            case 0xe0: DBG("DJI: record cmd: NOT SUPPORTED by camera"); break;
+            default:   DBG("DJI: record cmd reply 0x%02X", reply); break;
+        }
+    }
+
     // Unsolicited Telemetry (flags=0x00)
     if (flags == 0x00) {
         _telemetry.dataValid = true;
@@ -630,9 +656,11 @@ bool djiSendStartRecord() {
     uint8_t packet[32];
     uint8_t payload[] = {0x01}; // 1 = Start
 
-    // CmdSet 0x0A (Camera), CmdId 0x0D (Record)
+    // Osmo Action family record control: CmdSet 0x02 (camera control),
+    // CmdId 0x02 (record), payload 0x01 = start. Verified against the
+    // Osmosis project's DUML captures (MEDIA_PROTOCOL.md §11/§12).
     size_t len = buildDumlPacket(packet, 0x02, 0x01, _sequenceCounter++,
-                                 0x40, 0x0A, 0x0D, payload, sizeof(payload));
+                                 0x40, 0x02, 0x02, payload, sizeof(payload));
 
     if (_pControlChar && _pControlChar->canWriteNoResponse()) {
         _pControlChar->writeValue(packet, len, false);
@@ -648,8 +676,10 @@ bool djiSendStopRecord() {
     uint8_t packet[32];
     uint8_t payload[] = {0x00}; // 0 = Stop
 
+    // Osmo Action family record control: CmdSet 0x02, CmdId 0x02,
+    // payload 0x00 = stop (see MEDIA_PROTOCOL.md §12).
     size_t len = buildDumlPacket(packet, 0x02, 0x01, _sequenceCounter++,
-                                 0x40, 0x0A, 0x0D, payload, sizeof(payload));
+                                 0x40, 0x02, 0x02, payload, sizeof(payload));
 
     if (_pControlChar && _pControlChar->canWriteNoResponse()) {
         _pControlChar->writeValue(packet, len, false);
