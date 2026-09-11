@@ -1107,7 +1107,7 @@ function render(){
   const tEl=$('statetime');
 
   /* no-camera overlay: hide the record buttons until the link is READY */
-  const ready=(st==='READY');
+  const ready=(st==='CONNECTED'||st==='READY');
   const ov=$('camDown');
   ov.classList.toggle('hidden',ready);
   $('rbtns').style.display=ready?'flex':'none';

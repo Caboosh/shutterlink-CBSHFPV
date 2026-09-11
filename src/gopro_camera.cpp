@@ -240,7 +240,16 @@ void gpStartScan() {
     // user-initiated Scan button (via camStartUserScan() in camera_manager).
     // When the window closes, gpUpdate() transitions to BLE_DISCONNECTED
     // — the firmware NEVER auto-restarts the scan.
-    pScan->start(5, false);
+    //
+    // MUST pass scanCompleteCb explicitly: `start(5, false)` binds to the
+    // BLOCKING overload (start(duration, is_continue)) which freezes loop()
+    // for the full window and never invokes the completion callback —
+    // leaving scanResults' _scanning flag stuck true, so every later Scan
+    // request is rejected as "already scanning" and no BLE scan ever runs
+    // again until reboot.  The 3-arg overload is non-blocking and fires
+    // scanCompleteCb at window end, which resets the flag via
+    // scanResultsMarkComplete().
+    pScan->start(5, scanCompleteCb, false);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

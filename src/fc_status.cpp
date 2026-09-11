@@ -39,6 +39,17 @@ static char _boardName[17]   = {0};
 void fcStatusInit() {
     _fc.armed   = false;
     _fc.fcAlive = false;
+    // Reset identity discovery state machine
+    _identityDone      = false;
+    _identityStep      = 0;
+    _armBitIndex       = -1;
+    _lastMspRxTime     = 0;
+    _lastIdentityReq   = 0;
+    // Clear identity strings
+    memset(_apiVersion, 0, sizeof(_apiVersion));
+    memset(_variant, 0, sizeof(_variant));
+    memset(_fwVersion, 0, sizeof(_fwVersion));
+    memset(_boardName, 0, sizeof(_boardName));
 }
 
 const FcTelemetry& fcGetTelemetry() { return _fc; }
@@ -145,10 +156,23 @@ void fcStatusFeed(const MspMessage &msg) {
 void fcStatusUpdate() {
     uint32_t now = millis();
 
-    _fc.fcAlive = _fc.fcAlive || (now - _lastMspRxTime <= 2000 && _lastMspRxTime != 0);
-    if (_lastMspRxTime != 0) {
-        _fc.fcAlive = (now - _lastMspRxTime) <= 2000;
+    // Detect FC link loss: no MSP traffic for > 5 seconds
+    bool fcLinkLost = (_lastMspRxTime != 0 && (now - _lastMspRxTime) > 5000);
+    
+    // Auto-reset identity discovery if FC reboots or link is lost
+    if (fcLinkLost && _identityDone) {
+        DBG("FC: link lost, resetting identity discovery");
+        _identityDone      = false;
+        _identityStep      = 0;
+        _armBitIndex       = -1;
+        _lastIdentityReq   = 0;
+        memset(_apiVersion, 0, sizeof(_apiVersion));
+        memset(_variant, 0, sizeof(_variant));
+        memset(_fwVersion, 0, sizeof(_fwVersion));
+        memset(_boardName, 0, sizeof(_boardName));
     }
+
+    _fc.fcAlive = (_lastMspRxTime != 0 && (now - _lastMspRxTime) <= 2000);
 
     // Staggered identity queries during the first seconds after boot.
     if (!_identityDone) {

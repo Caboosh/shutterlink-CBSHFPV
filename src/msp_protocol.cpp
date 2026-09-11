@@ -184,6 +184,8 @@ void mspSendRequest(uint8_t cmdId) {
 
     _fcSerial->write(frame, 6);
     _fcSerial->flush();  // Ensure the bytes are sent immediately
+    
+    DBG("MSP: sent request CMD=%u", cmdId);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -442,16 +442,19 @@ static void handleCameraPost() {
             return;
         }
         
-        // Check if device is currently visible in scan results (online check)
-        uint8_t dcount = 0;
-        const ScanResult *dr = camRegistryDiscovered(dcount);
+        // Check if device is currently visible in scan results (online check).
+        // Uses the same live scan-results table that /api/scan serves, so a
+        // device shown in the Discover card is always pairable.
+        ScanResult const *sorted[MAX_SCAN_RESULTS];
+        uint8_t scount = scanResultsGetSortedByRssi(sorted, MAX_SCAN_RESULTS);
         bool isOnline = false;
         char nameBuf[24] = "";
-        for (uint8_t i = 0; i < dcount; i++) {
-            if (strcasecmp(dr[i].mac, mac.c_str()) == 0 && dr[i].type == (uint8_t)type) {
+        for (uint8_t i = 0; i < scount; i++) {
+            if (strcasecmp(sorted[i]->mac, mac.c_str()) == 0 &&
+                sorted[i]->type == (uint8_t)type) {
                 isOnline = true;
                 // Sanitize device name to prevent XSS
-                sanitizeDeviceName(nameBuf, dr[i].name, sizeof(nameBuf));
+                sanitizeDeviceName(nameBuf, sorted[i]->name, sizeof(nameBuf));
                 break;
             }
         }
@@ -574,8 +577,12 @@ static void handleMspPost() {
 // ──────────────────────────────────────────────────────────────────────────────
 
 static void handleScanResults() {
-    uint8_t dcount = 0;
-    const ScanResult *dr = camRegistryDiscovered(dcount);
+    // Serve the REAL scan-results table (populated directly by the BLE
+    // scan callbacks, sorted strongest-RSSI first) — not the cam_registry
+    // discovered list, which is fed through a single-slot "newest wins"
+    // funnel and drops all but the last advertiser.
+    ScanResult const *sorted[MAX_SCAN_RESULTS];
+    uint8_t n = scanResultsGetSortedByRssi(sorted, MAX_SCAN_RESULTS);
 
     static char buf[4096];
     char *p = buf;
@@ -585,18 +592,25 @@ static void handleScanResults() {
                         scanResultsIsScanning() ? "true" : "false");
     p += w; left -= w;
 
-    for (uint8_t i = 0; i < dcount && left > 64; i++) {
+    // Field names match what the Web UI's renderDiscovered() reads:
+    // r.mac, r.n (name), r.t (type STRING 'GoPro'/'DJI'), r.rssi.
+    for (uint8_t i = 0; i < n && left > 96; i++) {
         if (i > 0) { *p++ = ','; left--; }
-        
+
         // Sanitize device name before sending to client (prevent XSS)
         char sanitizedName[24] = "";
-        sanitizeDeviceName(sanitizedName, dr[i].name, sizeof(sanitizedName));
-        
-        w = snprintf(p, left, "{\"mac\":\"%s\",\"name\":\"%s\",\"type\":%u}",
-                     dr[i].mac, sanitizedName, (unsigned)dr[i].type);
+        sanitizeDeviceName(sanitizedName, sorted[i]->name, sizeof(sanitizedName));
+
+        const char *typeStr = (sorted[i]->type == CAMERA_GOPRO) ? "GoPro" : "DJI";
+        w = snprintf(p, left,
+                     "{\"mac\":\"%s\",\"n\":\"%s\",\"t\":\"%s\",\"rssi\":%d}",
+                     sorted[i]->mac, sanitizedName, typeStr, sorted[i]->rssi);
         p += w; left -= w;
     }
-    *p = '\0';
+
+    // Close the array and the object — without this the JSON is invalid,
+    // r.json() throws in the browser, and the Discover card stays empty.
+    if (left > 2) { snprintf(p, left, "]}"); }
 
     _server.send(200, "application/json", buf);
 }
