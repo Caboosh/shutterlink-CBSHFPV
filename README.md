@@ -26,18 +26,26 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
   to each slot via the Web UI. Pushed with `MSP2_SET_TEXT` (MSP v2, `0x3007`).
 - **Two camera backends** - DJI Osmo Action (DUML over BLE) and GoPro HERO8
   through HERO13 (official Open GoPro BLE API), switchable at runtime.
-- **Robust BLE link** - continuous scanning, auto-reconnect, keep-alive,
-  non-blocking state machine. Camera commands are absolute start/stop (never
-  toggles), so retries after reconnects are always safe.
+- **Saved-camera registry + discovery scanning** - scan for nearby cameras
+  from the Web UI, **Pair & Save** the one that's yours (up to 4 saved), and
+  the ESP32 auto-reconnects to it forever after - no ghost devices, nothing
+  is written to flash without your explicit consent.
+- **Wi-Fi power switch** - assign a spare AUX channel to toggle the Web-UI
+  hotspot on/off in flight (saves ~60-100 mA; the BLE camera link keeps
+  running).
+- **Robust BLE link** - auto-reconnect, keep-alive, non-blocking state
+  machine. Camera commands are absolute start/stop (never toggles), so
+  retries after reconnects are always safe.
 - **Built-in Web UI** - connect to the ESP32's Wi-Fi network and a modern
   Glassmorphism dashboard opens automatically (captive portal): live status,
-  manual REC/STOP buttons, all configuration, dark & light mode, frosted-glass
-  SVG icon set.
+  manual REC/STOP buttons, all configuration, OTA firmware updates, dark &
+  light mode, frosted-glass SVG icon set.
 - **Persistent settings** - everything you configure lives in NVS flash.
 - **Status LED patterns** - know your link state at a glance on the bench.
 - **Modular firmware** - `msp_protocol` (FC side), `fc_status` (arming),
   `dji_camera` / `gopro_camera` (camera side), `camera_manager` (dispatch),
-  `recorder` (decision engine), `osd_slots` (OSD), `web_server` + `web_assets`
+  `cam_registry` + `scan_results` (pairing), `recorder` (decision engine),
+  `osd_slots` (OSD), `wifiswitch` (AP power), `web_server` + `web_assets`
   (UI).
 
 ---
@@ -80,38 +88,157 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
 | **Camera** | DJI Osmo Action family **or** GoPro HERO8/9/10/11/12/13. |
 | Wiring | 4 wires: 5 V, GND, FC TX, FC RX. |
 
-### Wiring
+---
 
-| ESP32-C3 | Flight Controller |
+## Step-by-Step Setup Guide
+
+### Step 1 - Wire the ESP32 to the flight controller
+
+Four wires between the ESP32-C3 and a free UART on your FC:
+
+| ESP32-C3 | Flight Controller | Notes |
+|---|---|---|
+| **GPIO20** (RX) | UART **TX** | FC transmits → ESP32 receives |
+| **GPIO21** (TX) | UART **RX** | ESP32 transmits → FC receives |
+| **5 V** | 5 V | Or power the ESP32 from its own USB while bench-testing |
+| **GND** | GND | Common ground is mandatory |
+
+> TX goes to RX on both ends - it's a crossover, not pin-to-pin. Double-check
+> 5 V tolerance: most ESP32-C3 dev boards accept 5 V on the VIN/5V pin only.
+
+The on-board status LED (GPIO8 on most C3 boards) blinks the link state:
+
+| Pattern | Meaning |
 |---|---|
-| GPIO20 (RX) | UART **TX** |
-| GPIO21 (TX) | UART **RX** |
-| 5 V | 5 V |
-| GND | GND |
+| Slow blink (1 s) | Disconnected / scanning |
+| Fast blink (200 ms) | Connecting / authenticating |
+| Solid | Connected, camera standby |
+| Medium blink (500 ms) | Recording desired |
+
+### Step 2 - Configure Betaflight
+
+1. **Ports tab:** enable **MSP** on the UART wired to the ESP32
+   (115200 baud, leave everything else off for that port).
+2. **OSD tab:** place **Custom Message 1-4** elements wherever you want them
+   on your screen - position comes from Betaflight, *content* is pushed live
+   by ShutterLink.
+3. Assign an AUX channel (on your radio's mixes tab) as your record switch if
+   you want switch control. You don't need to create a Betaflight *mode* for
+   it - ShutterLink reads the raw RC channels.
+
+> Remember: your Betaflight build must support **Custom Message OSD
+> elements** (`MSP2_SET_TEXT`). Stock 4.x / 4.5 does not.
+
+### Step 3 - Build & flash the firmware
+
+```bash
+# 1. Clone
+git clone https://github.com/rover1312/shutterlink.git
+cd shutterlink
+
+# 2. Build
+pio run
+
+# 3. Flash (hold BOOT on some C3 boards if upload doesn't start)
+pio run -t upload
+
+# 4. Watch it work
+pio device monitor -b 115200
+```
+
+Dependencies (handled by PlatformIO): `h2zero/NimBLE-Arduino @ ^1.4.1`.
+Partition table switched to `min_spiffs.csv` (BLE + Wi-Fi + web UI need the
+bigger app slot).
+
+### Step 4 - Connect to the Web UI
+
+1. Power the ESP32 (FC 5 V or USB).
+2. On your phone or PC, join the Wi-Fi network **`ShutterLink`**
+   (password: **`shutterlink`**).
+3. The captive portal opens automatically on most devices; otherwise browse
+   to **`http://192.168.4.1`**.
+4. You land on the **Dashboard** with live status cards.
+
+### Step 5 - Pair your camera
+
+1. Power the camera on and put it within a few metres of the ESP32.
+2. In the Web UI open the **Camera** tab.
+3. Tap **Scan for Cameras** - a one-shot 5-second BLE scan runs and lists
+   nearby cameras (brand is auto-detected; strongest signal first).
+   - Camera not in the list? Tap **"Camera not listed? Show all nearby
+     devices"** and pick yours by signal strength (hold it within 1 m -
+     the strongest RSSI is usually yours).
+4. Tap **Pair & Save** on your camera. This is the only moment anything is
+   written to flash - devices the radio merely *sees* are never persisted.
+5. Watch the camera screen:
+   - **GoPro:** the first ever connection asks for a **one-time approval
+     tap** on the camera's own screen. After that, reconnection is silent.
+   - **DJI:** an approve prompt may appear once - tap approve.
+6. The LED goes solid and the Dashboard shows the camera model + battery.
+   From now on the ESP32 reconnects to this camera automatically, no scan
+   needed.
+
+Up to **4 cameras** can be saved; switch the active one (or remove entries)
+from the **Saved cameras** card in the same tab.
+
+### Step 6 - Configure the record switch
+
+1. Open the **Controls** tab.
+2. Pick your **switch channel** (CH5-16 / AUX1-12), the **ON threshold**
+   (default 1500 us) and **debounce** (default 300 ms) - hit **Save switch
+   settings**.
+3. Optional: enable **Record on arm** (+ **Stop on disarm**) so recording
+   follows the arming state instead of a switch.
+4. Flip the switch and watch the Dashboard: the record-switch card should
+   flip from IDLE to ON, and the camera starts/stops recording.
+
+### Step 7 - (Optional) Fine-tune OSD & Wi-Fi
+
+- **OSD tab:** assign content (Cam status / Rec time / Battery / Link / FC
+  battery / Arm state / Off) to Custom Messages 1-4 with live previews.
+- **Controls tab:** change the Wi-Fi SSID/password, or assign a spare AUX
+  channel as a **Wi-Fi radio switch** - flip it low in flight and the hotspot
+  powers down to save ~60-100 mA (BLE camera control keeps running; the AP
+  always boots ON so you can't lock yourself out).
+
+Done - go fly.
 
 ---
 
-## Betaflight Setup
+## Web UI Guide
 
-1. **Ports tab:** enable **MSP** on the UART wired to the ESP32 (115200 baud).
-2. **OSD tab:** place **Custom Message 1-4** elements wherever you want them -
-   position comes from Betaflight, content from ShutterLink.
-3. Assign an AUX channel as your record switch if you use switch control.
-
----
-
-## Web UI
-
-Connect a phone/PC to the ShutterLink Wi-Fi network - the captive portal opens
-automatically on most devices, otherwise browse to `http://192.168.4.1`.
+Connect a phone/PC to the ShutterLink Wi-Fi network - the captive portal
+opens automatically on most devices, otherwise browse to
+`http://192.168.4.1`. Five tabs along the top:
 
 | Tab | What you can do |
 |---|---|
-| **Dashboard** | Live link/camera/FC status, big START / STOP buttons, live preview of the four OSD strings. |
-| **Controls** | Record switch channel (CH5-16/AUX), ON threshold, debounce, **record-on-arm + stop-on-disarm toggles**, Wi-Fi AP credentials. |
-| **Camera** | Switch DJI Osmo / GoPro at runtime, pairing instructions, reboot. |
+| **Dashboard** | Live link/camera/FC status, big START / STOP buttons, live preview of the four OSD strings, camera battery, record-switch value, FC battery & arm state, heap/uptime. |
+| **Controls** | Record switch channel (CH5-16/AUX), ON threshold, debounce, **record-on-arm + stop-on-disarm toggles**, Wi-Fi AP credentials, Wi-Fi radio switch channel. |
+| **Camera** | Active connection status, saved-camera registry (select/remove, up to 4), discovery scan with **Pair & Save**, "show all nearby devices" fallback. |
 | **OSD** | Assign content to Custom Message slots 1-4 with live previews. |
-| **FC / System** | Betaflight identity (API/firmware/board), battery, arm state, heap/uptime, reboot. |
+| **FC / System** | Betaflight identity (API/firmware/board), battery, arm state, read-only **MSP console** (passthrough to your FC), free heap/uptime/firmware version, reboot, **OTA firmware update** (.bin upload). |
+
+### Navigating the Camera tab (pairing in detail)
+
+The Camera tab has three cards:
+
+1. **Active connection** - which camera is connected right now, its model,
+   battery and link state.
+2. **Saved cameras** - your NVS registry (max 4). Tap an entry to make it
+   active and connect immediately; remove entries you no longer own.
+3. **Discover new camera** - the pairing workflow:
+   - Press **Scan for Cameras** (5-second one-shot window, results sorted by
+     signal strength, type auto-detected).
+   - Tap **Pair & Save** on your device. The ESP32 saves it to flash,
+     selects it and connects immediately.
+   - Nothing ever auto-connects except the *saved, active* camera - a
+     camera that merely appears in a scan is never persisted.
+   - If your camera doesn't match the auto-detection filters, use the
+     **Show all nearby devices** link and identify it by RSSI.
+
+First-connection approvals happen on the **camera's own screen** (one tap
+for GoPro, sometimes one for DJI) - after that, reconnection is silent.
 
 The UI is a single-page app embedded in the firmware (PROGMEM, ~33 KB):
 frosted glass cards, backdrop blur, animated gradient background, smooth
@@ -124,8 +251,14 @@ Configurator is a multi-megabyte desktop-class app and needs a serial/WebSocket
 bridge). But the firmware already speaks MSP in both directions over the FC
 UART, so a lightweight config panel - reading/writing selected settings via
 MSP passthrough (think "Betaflight Lua scripts in a browser") - is absolutely
-feasible as a future subtab. The FC/System tab already demonstrates live MSP
-data flowing from your FC.
+feasible as a future subtab. The FC/System tab's MSP console already
+demonstrates live MSP data flowing from your FC (read-only allowlist today).
+
+### Updating firmware over Wi-Fi (OTA)
+
+FC / System tab → **Firmware Update (OTA)**: upload a `.bin` from a GitHub
+Release and the ESP32 flashes it and reboots automatically. Don't close the
+page or power off mid-upload; if it fails, re-flash over USB.
 
 ---
 
@@ -160,29 +293,6 @@ HERO5-7 use a different legacy protocol and are not supported.
 
 ---
 
-## Build & Flash
-
-```bash
-# 1. Clone
-git clone https://github.com/rover1312/shutterlink.git
-cd shutterlink
-
-# 2. Build
-pio run
-
-# 3. Flash
-pio run -t upload
-
-# 4. Watch it work
-pio device monitor -b 115200
-```
-
-Dependencies (handled by PlatformIO): `h2zero/NimBLE-Arduino @ ^1.4.1`.
-Partition table switched to `min_spiffs.csv` (BLE + Wi-Fi + web UI need the
-bigger app slot).
-
----
-
 ## Configuration
 
 Runtime settings live in NVS and are edited from the Web UI. Compile-time
@@ -196,6 +306,9 @@ defaults are in `src/config.h`:
 | `DEFAULT_RC_THRESHOLD_US` | 1500 | us above = ON |
 | `DEFAULT_RC_DEBOUNCE_MS` | 300 | Switch debounce |
 | `DEFAULT_RECORD_ON_ARM` | false | Auto-record on arming |
+| `DEFAULT_STOP_ON_DISARM` | true | Stop when FC disarms |
+| `DEFAULT_SCAN_ALL` | false | Show all BLE advertisers during discovery |
+| `DEFAULT_WIFI_SWITCH_CH` | 255 (off) | AUX channel toggling the Wi-Fi AP |
 | `WIFI_AP_DEFAULT_SSID` / `_PASS` | ShutterLink / shutterlink | Web UI hotspot |
 | `DEFAULT_OSD_SLOT_1..4` | status/time/batt/link | Custom Message contents |
 | `STATUS_LED_PIN` | 8 | Onboard LED |
@@ -206,30 +319,44 @@ defaults are in `src/config.h`:
 shutterlink/
 +-- platformio.ini          # ESP32-C3 build config + NimBLE dependency
 +-- README.md
++-- .vscode/                # IntelliSense / debug configs (PlatformIO)
 +-- src/
     +-- config.h            # Pins, defaults, timings, debug switch
-    +-- settings.h/.cpp     # NVS-backed runtime configuration
+    +-- settings.h/.cpp     # NVS-backed runtime configuration + saved-camera
+    |                       #   registry types (ShutterSettings)
     +-- main.cpp            # Non-blocking loop orchestration
     +-- msp_protocol.h/.cpp # MSP v1 parser + MSP v2 SET_TEXT (CRC-DVB-S2)
     +-- fc_status.h/.cpp    # Arm detection, FC battery/identity polling
-    +-- camera_common.h     # Shared camera types
-    +-- dji_camera.h/.cpp   # DJI Osmo DUML-over-BLE backend
+    +-- camera_common.h     # Shared camera types (backend interface)
+    +-- dji_camera.h/.cpp   # DJI Osmo DUML-over-BLE backend + discovery
+    |                       #   filters (name/OUI/service/mfr-data)
     +-- gopro_camera.h/.cpp # GoPro Open BLE backend
-    +-- camera_manager.*    # Backend dispatcher (runtime switching)
+    +-- camera_manager.h/.cpp  # Backend dispatcher (runtime switching,
+    |                          # user-initiated scans, reconnect kicks)
+    +-- scan_results.h/.cpp    # In-RAM BLE scan results collector (Web UI
+    |                          #   "Discovered cameras" card, RSSI-sorted,
+    |                          #   TTL eviction, max 10)
+    +-- cam_registry.h/.cpp   # Two-tier camera registry: in-RAM discovered
+    |                          #   list + NVS "saved" list (Pair & Save only;
+    |                          #   kills the ghost-device bug; max 4 saved)
     +-- recorder.h/.cpp     # Switch/arm/manual -> record decision engine
     +-- osd_slots.h/.cpp    # Custom Message 1-4 content manager
-    +-- web_server.h/.cpp   # SoftAP, captive DNS, REST API
+    +-- wifiswitch.h/.cpp   # AUX-switch power control for the Wi-Fi AP
+    +-- web_server.h/.cpp   # SoftAP, captive DNS, REST API, OTA endpoint
     +-- web_assets.h        # Embedded Glassmorphism Web UI (PROGMEM)
 ```
 
-## Status LED Cheat-Sheet
+### REST API (used by the Web UI)
 
-| Pattern | Meaning |
+| Endpoint | Purpose |
 |---|---|
-| Slow blink (1 s) | Disconnected / scanning |
-| Fast blink (200 ms) | Connecting / authenticating |
-| Solid | Connected, camera standby |
-| Medium blink (500 ms) | Recording desired |
+| `GET /api/status` | Live telemetry snapshot (JSON) |
+| `POST /api/settings` | Update + persist settings |
+| `POST /api/camera` | `{"scan":true}` \| `{"pair":"MAC","type":0\|1}` \| `{"select":i}` \| `{"remove":i}` |
+| `POST /api/command` | `{"cmd":"start"\|"stop"\|"reboot"}` |
+| `POST /api/msp` | Read-only allowlisted MSP passthrough |
+| `GET /api/scan` | Current scan results |
+| `POST /api/ota` / `GET /api/ota/status` | OTA firmware update |
 
 ## Known Limitations (ESP32-C3)
 
@@ -245,10 +372,12 @@ shutterlink/
 - [x] Parallel info on all four custom messages
 - [x] Glassmorphism Web UI with dark/light mode
 - [x] Record-on-arm (+ stop-on-disarm)
+- [x] Camera registry with discovery scan + Pair & Save
+- [x] OTA firmware update from the Web UI
+- [x] Wi-Fi power switch on a spare AUX channel
 - [ ] Lightweight MSP config panel ("configurator-lite" subtab)
 - [ ] Profiles , Camera configuration.
 - [ ] Full DJI telemetry parse (battery %, rec time from DUML notifications)
-
 
 ## Credits & References
 
@@ -263,4 +392,3 @@ shutterlink/
 ## License
 
 MIT - do what you want, fly safe, and land your protocols responsibly.
-
