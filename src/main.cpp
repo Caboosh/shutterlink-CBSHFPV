@@ -16,7 +16,7 @@
 //   │                                                            │
 //   │  1. camUpdate()          — BLE scan/connect/keep-alive     │
 //   │  2. mspPollRC()          — MSP_RC request on timer         │
-//   │  3. mspReadIncoming()    — Parse UART bytes                │
+//   │  3. mspReadIncoming()    — Parse UART bytes (+ bench cfg)  │
 //   │  4. fcStatusUpdate()     — Arm/battery/identity polling    │
 //   │  5. recorderUpdate()     — Switch + arm → record commands  │
 //   │  6. osdSlotsUpdate()     — Push 4 custom messages          │
@@ -120,9 +120,24 @@ static void mspPollRC() {
 static void mspReadIncoming() {
     MspMessage msg;
 
-    // Drain the UART buffer byte-by-byte into the MSP parser.
+    // Drain the UART buffer byte-by-byte, feeding every byte to both the
+    // MSP parser AND the Web Serial bench-config JSON line assembler for
+    // this port (serialConfigFeedFcUartByte). Serial1 can only be consumed
+    // once, so this is the single owner of Serial1.read() — both consumers
+    // just ignore whatever isn't theirs (MSP frames always start with '$',
+    // JSON commands always start with '{'), the same trick already used to
+    // separate DBG() lines from JSON replies sharing the USB port.
+    //
+    // In normal flight this only ever sees MSP frames from a live FC, and
+    // the JSON assembler harmlessly discards every line (none start with
+    // '{'). During a Betaflight serial passthrough session targeting this
+    // UART, the FC stops running its own firmware and just bridges the
+    // wire to a browser instead — so JSON bench-config commands appear
+    // here, and the MSP parser's state machine harmlessly ignores them.
     while (Serial1.available()) {
         uint8_t byte = Serial1.read();
+
+        serialConfigFeedFcUartByte(byte);
 
         if (mspParseByte(byte, msg)) {
             // ── Complete MSP message received ───────────────────────────
@@ -187,7 +202,8 @@ void setup() {
     wifiSwitchInit();
     webInit();
 
-    // ── Web Serial bench config protocol (same USB port as DBG output) ──
+    // ── Web Serial bench config protocol (USB port used for DBG output,   ─
+    // ── plus the FC UART when reached via Betaflight serial passthrough) ─
     serialConfigInit();
 
     DBG("SETUP: Complete — entering main loop");

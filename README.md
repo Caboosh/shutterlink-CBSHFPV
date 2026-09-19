@@ -309,18 +309,52 @@ no conflict.
 
 | Host → device | Purpose |
 |---|---|
-| `{"path":"ping"}` | Liveness check — replies with device name + firmware version |
+| `{"path":"ping"}` | Liveness check — replies with device name + firmware version + which port answered (`"via":"usb"` or `"fc-uart"`) |
 | `{"path":"status"}` | Same status payload as `GET /api/status` |
 | `{"path":"settings", ...}` | Same fields as `POST /api/settings` |
 | `{"path":"camera", ...}` | Same fields as `POST /api/camera` |
 | `{"path":"command","cmd":"start"\|"stop"\|"reboot"}` | Same as `POST /api/command` |
-| `{"path":"msp","cmd":<u8>}` | MSP passthrough — **unrestricted** here (unlike `/api/msp`'s read-only allowlist), since this channel requires a physical USB cable, a much higher trust bar than the Wi-Fi AP |
+| `{"path":"msp","cmd":<u8>}` | MSP passthrough — **unrestricted** here (unlike `/api/msp`'s read-only allowlist), since this channel requires a physical USB cable, a much higher trust bar than the Wi-Fi AP. Only works over the direct USB port — see below |
 
 Only one request is in flight at a time — send a command and wait for the
 next `{`-prefixed reply line before sending another. `/api/scan` and OTA
 firmware flashing are intentionally out of scope for this transport (scan
 results are already embedded in the status response; OTA-over-Web-Serial
 would need a chunked-upload + bootloader handshake, its own feature).
+
+### Reaching it without a USB cable to the C3 (Betaflight passthrough)
+
+Once the ESP32-C3 is installed in the quad, its own USB-C port is often
+buried or hard to reach. Since the C3 is already wired to a free FC UART for
+MSP (see Step 1), the same bench-config protocol also listens on that UART
+(`Serial1`), reachable through **Betaflight's serial passthrough** feature
+via the FC's own, more accessible USB port — no extra cable, no
+disassembly:
+
+1. Plug the quad into the PC over USB as normal (Betaflight Configurator or
+   CLI).
+2. In the CLI tab, run `serial_passthrough <uart-id> 115200`, where
+   `<uart-id>` is the UART number wired to the ESP32-C3 (the one with MSP
+   enabled in the Ports tab) — or use the Configurator's Ports tab
+   passthrough option if your version exposes one. Betaflight bridges its
+   USB connection straight through to that UART and **stops flying** —
+   this is bench-only, disarmed, never in the air.
+3. Close (or don't otherwise touch) the Configurator so the OS COM port is
+   free, then open the Web Serial bench console and pick that **same COM
+   port** (the FC's, not the C3's) when it prompts you to connect. From the
+   browser's side it's an identical 115200-baud serial connection either
+   way.
+4. A `{"path":"ping"}` reply with `"via":"fc-uart"` confirms you're talking
+   to the C3 through the passthrough bridge rather than a direct cable.
+
+Caveats while a passthrough session is open: the FC isn't running its own
+firmware, so the ESP32 loses live FC telemetry (arm state, RC-switch
+polling, OSD pushes) until you end the passthrough session and reboot/
+reconnect the FC normally — and `{"path":"msp",...}` on this channel always
+replies with an error, since there's no independent live FC left on the
+wire to bounce the MSP request off. Use the direct USB cable for MSP
+passthrough; use the FC-UART/passthrough route for everything else
+(`ping`/`status`/`settings`/`camera`/`command`).
 
 The logic behind both transports lives once, in `api_core.cpp` — `web_server.cpp`'s
 HTTP handlers and `serial_config.cpp`'s dispatcher are both thin wrappers
