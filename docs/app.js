@@ -1,8 +1,13 @@
 // ============================================================================
 // app.js — ShutterLink Bench Console (Web Serial)
 // ============================================================================
-// Talks to the firmware's serial_config.cpp line-oriented JSON protocol over
-// the same USB port used for flashing and DBG() logging (115200 baud).
+// Talks to the firmware's serial_config.cpp line-oriented JSON protocol,
+// reachable over either of two ports:
+//   • the C3's own USB port (used for flashing and DBG() logging too),
+//     115200 baud — connect() / "Connect over USB".
+//   • the FC's USB port, bridged onto the UART wired to the C3 via a
+//     Betaflight serial passthrough session we drive ourselves —
+//     connectViaFcPassthrough() / "Connect via FC passthrough" below.
 // DBG() lines never start with '{', so every line read from the port is
 // logged raw, and only '{'-prefixed lines are treated as protocol replies.
 //
@@ -51,10 +56,12 @@ function logLine(text, cls) {
   if ($("autoScroll").checked) log.scrollTop = log.scrollHeight;
 }
 
-function setConnected(isConnected) {
+function setConnected(isConnected, via) {
   connected = isConnected;
   $("connDot").classList.toggle("connected", isConnected);
-  $("connLabel").textContent = isConnected ? "Connected" : "Not connected";
+  $("connLabel").textContent = isConnected
+    ? (via === "fc-uart" ? "Connected (FC passthrough)" : "Connected")
+    : "Not connected";
   $("btnConnect").hidden = isConnected;
   $("btnDisconnect").hidden = !isConnected;
   $("app").setAttribute("aria-disabled", isConnected ? "false" : "true");
@@ -64,9 +71,36 @@ function setConnected(isConnected) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Web Serial plumbing
 // ──────────────────────────────────────────────────────────────────────────
+
+/// Common tail once `port` is open and `writer` is grabbed, regardless of
+/// which path got us there (direct USB, or FC passthrough below).
+function finishConnect(via) {
+  setConnected(true, via);
+  logLine(`[console] connected (${via === "fc-uart" ? "FC passthrough" : "direct USB"})`);
+
+  port.addEventListener("disconnect", handleUnexpectedDisconnect);
+
+  readLoopPromise = readLoop().catch((err) => {
+    if (connected) logLine(`[console] read error: ${err.message}`, "err");
+  });
+
+  statusPollTimer = setInterval(pollStatus, 1000);
+
+  // Confirm from the firmware's own side which port answered — belt and
+  // braces against a passthrough attempt that silently didn't take.
+  sendCommand({ path: "ping" })
+    .then((r) => logLine(`[console] device confirms via=${r.via || "?"} fw=${r.fw || "?"}`))
+    .catch((err) => logLine(`[console] ping failed: ${err.message}`, "err"));
+
+  pollStatus();
+}
 
 async function connect() {
   if (!("serial" in navigator)) {
@@ -82,17 +116,86 @@ async function connect() {
   }
 
   writer = port.writable.getWriter();
-  setConnected(true);
-  logLine("[console] connected");
+  finishConnect("usb");
+}
 
-  port.addEventListener("disconnect", handleUnexpectedDisconnect);
+// ──────────────────────────────────────────────────────────────────────────
+// Betaflight passthrough bootstrap
+// ──────────────────────────────────────────────────────────────────────────
+// One click in place of: open Betaflight Configurator → CLI tab →
+// `serialpassthrough <uart> <baud>` → close Configurator → come back here
+// and reconnect to the same COM port. We drive the FC's CLI ourselves over
+// the port we just opened and then keep using that SAME connection as the
+// ShutterLink JSON channel — no second app, no reconnect.
+//
+// This is the same technique ExpressLRS's own flashing tool
+// (BFinitPassthrough.py) uses to reach a receiver wired to an FC UART:
+// plain CLI automation ('#' to force CLI mode, then `serialpassthrough`),
+// not a special binary MSP command.
+const FC_CLI_SETTLE_MS = 400;
+const FC_PASSTHROUGH_SETTLE_MS = 300;
+const LS_UART_KEY = "shutterlink.fcUartNumber";
+const LS_BAUD_KEY = "shutterlink.fcUartBaud";
 
-  readLoopPromise = readLoop().catch((err) => {
-    if (connected) logLine(`[console] read error: ${err.message}`, "err");
-  });
+async function connectViaFcPassthrough() {
+  if (!("serial" in navigator)) {
+    $("unsupportedNotice").hidden = false;
+    return;
+  }
 
-  statusPollTimer = setInterval(pollStatus, 1000);
-  pollStatus();
+  const uartNumber = Number($("fcUartNumber").value);
+  const baud = Number($("fcUartBaud").value) || 115200;
+  if (!uartNumber || uartNumber < 1) {
+    logLine("[console] enter the Betaflight UART number wired to the C3 first (Ports tab)", "err");
+    return;
+  }
+  try {
+    localStorage.setItem(LS_UART_KEY, String(uartNumber));
+    localStorage.setItem(LS_BAUD_KEY, String(baud));
+  } catch (_) {} // best-effort convenience only
+
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: baud });
+  } catch (err) {
+    if (err.name !== "NotFoundError") logLine(`[console] connect failed: ${err.message}`, "err");
+    return;
+  }
+
+  writer = port.writable.getWriter();
+  logLine(`[console] opened FC port at ${baud} baud, requesting CLI…`);
+
+  try {
+    // Nudge a live MSP connection into CLI mode. Harmless if the FC is
+    // already sitting at a CLI prompt (it just reprints it).
+    await writer.write(new TextEncoder().encode("#\n"));
+    await sleep(FC_CLI_SETTLE_MS);
+
+    // Betaflight's `serialpassthrough` takes a zero-based UART identifier,
+    // not the number printed on the Ports tab: UART1 -> 0, UART2 -> 1, …
+    const uartId = uartNumber - 1;
+    logLine(`[console] entering passthrough on UART${uartNumber} (id ${uartId}) @ ${baud}…`);
+    await writer.write(new TextEncoder().encode(`serialpassthrough ${uartId} ${baud}\n`));
+    await sleep(FC_PASSTHROUGH_SETTLE_MS);
+  } catch (err) {
+    logLine(`[console] failed to enter passthrough: ${err.message}`, "err");
+    await teardown();
+    return;
+  }
+
+  // From here the wire is a transparent pipe straight to the C3 — same
+  // JSON protocol, same read loop, as the direct-USB path.
+  finishConnect("fc-uart");
+  logLine("[console] power-cycle the FC to exit passthrough and fly again when you're done");
+}
+
+function restorePassthroughFields() {
+  try {
+    const uart = localStorage.getItem(LS_UART_KEY);
+    const baud = localStorage.getItem(LS_BAUD_KEY);
+    if (uart) $("fcUartNumber").value = uart;
+    if (baud) $("fcUartBaud").value = baud;
+  } catch (_) {} // best-effort convenience only
 }
 
 async function handleUnexpectedDisconnect() {
@@ -355,6 +458,7 @@ async function runAction(btn, fn) {
 
 function wireStaticActions() {
   $("btnConnect").addEventListener("click", connect);
+  $("btnConnectPassthrough").addEventListener("click", (e) => runAction(e.target, connectViaFcPassthrough));
   $("btnDisconnect").addEventListener("click", disconnect);
 
   $("btnStart").addEventListener("click", (e) =>
@@ -457,4 +561,5 @@ function wireStaticActions() {
 if (!("serial" in navigator)) {
   $("unsupportedNotice").hidden = false;
 }
+restorePassthroughFields();
 wireStaticActions();
