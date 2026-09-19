@@ -40,13 +40,18 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
   Glassmorphism dashboard opens automatically (captive portal): live status,
   manual REC/STOP buttons, all configuration, OTA firmware updates, dark &
   light mode, frosted-glass SVG icon set.
+- **Web Serial bench console** - a GitHub Pages-hosted page (`docs/`) that
+  talks straight to the board over USB (no Wi-Fi needed) for bench setup and
+  debugging: live status, all the same configuration forms as the field Web
+  UI, unrestricted MSP passthrough, and a raw serial log panel.
 - **Persistent settings** - everything you configure lives in NVS flash.
 - **Status LED patterns** - know your link state at a glance on the bench.
 - **Modular firmware** - `msp_protocol` (FC side), `fc_status` (arming),
   `dji_camera` / `gopro_camera` (camera side), `camera_manager` (dispatch),
   `cam_registry` + `scan_results` (pairing), `recorder` (decision engine),
-  `osd_slots` (OSD), `wifiswitch` (AP power), `web_server` + `web_assets`
-  (UI).
+  `osd_slots` (OSD), `wifiswitch` (AP power), `api_core` + `json_scan`
+  (shared config-surface logic), `web_server` + `web_assets` (Wi-Fi
+  transport + UI), `serial_config` (USB Web Serial transport).
 
 ---
 
@@ -64,6 +69,7 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
                                                                        |
                  phone/PC  <-- Wi-Fi AP + captive portal --------------+
                                   (Web UI)
+                 bench PC  <-- USB Web Serial (docs/ bench console) ---+
 ```
 
 1. **Switch / arm to ESP32:** polls `MSP_RC` every 200 ms; watches your
@@ -71,11 +77,15 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
    `MSP_STATUS` + `MSP_BOXIDS` for arming state.
 2. **ESP32 to Camera:** desired-recording = switch ON OR (record-on-arm AND
    armed). On transitions it sends the camera's absolute start/stop command
-   over BLE. Manual buttons in the Web UI do the same.
+   over BLE. Manual buttons in the Web UI (or bench console) do the same.
 3. **Camera to OSD:** up to four independent strings pushed on change (checked
    every 500 ms) into Betaflight Custom Messages 1-4 via `MSP2_SET_TEXT`.
 4. **Web UI:** the ESP32 runs a SoftAP (default SSID `ShutterLink`, password
    `shutterlink`). Browse to `http://192.168.4.1`.
+5. **Bench console:** the same configuration surface is also reachable over
+   USB from `docs/index.html` (see "Web Serial Bench Console" below) — useful
+   on the bench without joining the ESP32's Wi-Fi network, and for reading
+   MSP without the Wi-Fi API's read-only restriction.
 
 ---
 
@@ -88,6 +98,19 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
 | **Camera** | DJI Osmo Action family **or** GoPro HERO8/9/10/11/12/13. |
 | Wiring | 4 wires: 5 V, GND, FC TX, FC RX. |
 
+> **ESP32-C3 "Super Mini" / native-USB boards:** these have no separate
+> USB-UART bridge chip — the chip's native USB peripheral is used directly.
+> `platformio.ini` must set `-D ARDUINO_USB_MODE=1` and
+> `-D ARDUINO_USB_CDC_ON_BOOT=1` in `build_flags` (already set in this
+> repo's `platformio.ini`), or Arduino's `Serial` object binds to the
+> disconnected UART0 peripheral instead of the native USB-CDC your monitor
+> is actually attached to. Symptom if this is ever missing: `DBG()` output
+> still appears in the serial monitor fine (it's routed via the IDF console
+> over USB-Serial-JTAG regardless), but anything you *type* into the
+> monitor is silently lost — `Serial.read()` never sees it, even at the
+> byte level. This affects both the plain debug console and the Web Serial
+> bench protocol.
+
 ---
 
 ## Step-by-Step Setup Guide
@@ -98,8 +121,8 @@ Four wires between the ESP32-C3 and a free UART on your FC:
 
 | ESP32-C3 | Flight Controller | Notes |
 |---|---|---|
-| **GPIO20** (RX) | UART **TX** | FC transmits → ESP32 receives |
-| **GPIO21** (TX) | UART **RX** | ESP32 transmits → FC receives |
+| **GPIO5** (RX) | UART **TX** | FC transmits → ESP32 receives |
+| **GPIO4** (TX) | UART **RX** | ESP32 transmits → FC receives |
 | **5 V** | 5 V | Or power the ESP32 from its own USB while bench-testing |
 | **GND** | GND | Common ground is mandatory |
 
@@ -148,7 +171,9 @@ pio device monitor -b 115200
 
 Dependencies (handled by PlatformIO): `h2zero/NimBLE-Arduino @ ^1.4.1`.
 Partition table switched to `min_spiffs.csv` (BLE + Wi-Fi + web UI need the
-bigger app slot).
+bigger app slot). `ARDUINO_USB_MODE` / `ARDUINO_USB_CDC_ON_BOOT` build flags
+are required for native-USB C3 boards — see the Hardware Requirements note
+above.
 
 ### Step 4 - Connect to the Web UI
 
@@ -262,6 +287,49 @@ page or power off mid-upload; if it fails, re-flash over USB.
 
 ---
 
+## Web Serial Bench Console
+
+`docs/` (served as GitHub Pages, e.g. `https://<user>.github.io/shutterlink/`)
+is a standalone page that talks to the ESP32 directly over USB using the
+browser's [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) —
+no Wi-Fi network required. Useful for bench setup, and it shares a raw
+`DBG()` log panel you don't get from the field Web UI.
+
+**Requirements:** a Chromium-based desktop browser (Chrome, Edge, Opera) and
+a secure context — `https://` (GitHub Pages is fine) or `http://localhost`.
+Web Serial does **not** work opened as a `file://` URL. For local testing,
+serve the folder (`python3 -m http.server` from `docs/`, then visit
+`http://localhost:8000`).
+
+**Protocol:** `serial_config.cpp` implements a line-delimited JSON protocol
+over the same USB port used for flashing and `DBG()` output (`Serial`,
+115200 baud). `DBG()` lines never start with `{`, so the console filters on
+that to tell protocol replies from debug noise — both share the port with
+no conflict.
+
+| Host → device | Purpose |
+|---|---|
+| `{"path":"ping"}` | Liveness check — replies with device name + firmware version |
+| `{"path":"status"}` | Same status payload as `GET /api/status` |
+| `{"path":"settings", ...}` | Same fields as `POST /api/settings` |
+| `{"path":"camera", ...}` | Same fields as `POST /api/camera` |
+| `{"path":"command","cmd":"start"\|"stop"\|"reboot"}` | Same as `POST /api/command` |
+| `{"path":"msp","cmd":<u8>}` | MSP passthrough — **unrestricted** here (unlike `/api/msp`'s read-only allowlist), since this channel requires a physical USB cable, a much higher trust bar than the Wi-Fi AP |
+
+Only one request is in flight at a time — send a command and wait for the
+next `{`-prefixed reply line before sending another. `/api/scan` and OTA
+firmware flashing are intentionally out of scope for this transport (scan
+results are already embedded in the status response; OTA-over-Web-Serial
+would need a chunked-upload + bootloader handshake, its own feature).
+
+The logic behind both transports lives once, in `api_core.cpp` — `web_server.cpp`'s
+HTTP handlers and `serial_config.cpp`'s dispatcher are both thin wrappers
+around the same `apiBuildStatusJson()` / `apiApplySettings()` /
+`apiApplyCamera()` / `apiApplyCommand()` functions, so the two can't drift
+out of sync with each other.
+
+---
+
 ## Camera Support Notes
 
 ### DJI Osmo Action (DUML over BLE)
@@ -295,8 +363,8 @@ HERO5-7 use a different legacy protocol and are not supported.
 
 ## Configuration
 
-Runtime settings live in NVS and are edited from the Web UI. Compile-time
-defaults are in `src/config.h`:
+Runtime settings live in NVS and are edited from the Web UI (or bench
+console). Compile-time defaults are in `src/config.h`:
 
 | Define | Default | Purpose |
 |---|---|---|
@@ -317,8 +385,13 @@ defaults are in `src/config.h`:
 
 ```
 shutterlink/
-+-- platformio.ini          # ESP32-C3 build config + NimBLE dependency
++-- platformio.ini          # ESP32-C3 build config + NimBLE dependency +
+|                            #   native-USB CDC flags
 +-- README.md
++-- docs/                   # GitHub Pages Web Serial bench console
+|   +-- index.html
+|   +-- style.css
+|   +-- app.js
 +-- .vscode/                # IntelliSense / debug configs (PlatformIO)
 +-- src/
     +-- config.h            # Pins, defaults, timings, debug switch
@@ -342,7 +415,11 @@ shutterlink/
     +-- recorder.h/.cpp     # Switch/arm/manual -> record decision engine
     +-- osd_slots.h/.cpp    # Custom Message 1-4 content manager
     +-- wifiswitch.h/.cpp   # AUX-switch power control for the Wi-Fi AP
+    +-- json_scan.h/.cpp    # Tiny flat-JSON reader shared by both transports
+    +-- api_core.h/.cpp     # Transport-agnostic status/settings/camera/
+    |                       #   command logic shared by web_server + serial_config
     +-- web_server.h/.cpp   # SoftAP, captive DNS, REST API, OTA endpoint
+    +-- serial_config.h/.cpp # Web Serial bench-config protocol (USB)
     +-- web_assets.h        # Embedded Glassmorphism Web UI (PROGMEM)
 ```
 
@@ -358,6 +435,8 @@ shutterlink/
 | `GET /api/scan` | Current scan results |
 | `POST /api/ota` / `GET /api/ota/status` | OTA firmware update |
 
+See "Web Serial Bench Console" above for the USB equivalent of this surface.
+
 ## Known Limitations (ESP32-C3)
 
 - Wi-Fi and BLE share one radio; heavy Wi-Fi traffic can slightly delay BLE.
@@ -365,6 +444,9 @@ shutterlink/
 - GoPro telemetry depth depends on model firmware (battery %, encoding state;
   record timer is counted locally while encoding).
 - DJI telemetry parsing beyond link state is still experimental upstream.
+- Native-USB C3 boards ("Super Mini" and similar) require the
+  `ARDUINO_USB_MODE` / `ARDUINO_USB_CDC_ON_BOOT` build flags (already set in
+  this repo) — see the Hardware Requirements note above.
 
 ## Roadmap
 
@@ -375,9 +457,11 @@ shutterlink/
 - [x] Camera registry with discovery scan + Pair & Save
 - [x] OTA firmware update from the Web UI
 - [x] Wi-Fi power switch on a spare AUX channel
+- [x] Web Serial bench console (GitHub Pages, USB transport)
 - [ ] Lightweight MSP config panel ("configurator-lite" subtab)
 - [ ] Profiles , Camera configuration.
-- [ ] Full DJI telemetry parse (battery %, rec time from DUML notifications)
+- [x] Full DJI telemetry parse (battery %, rec time from DUML notifications)
+- [ ] OTA firmware flashing over Web Serial (chunked upload + bootloader handshake)
 
 ## Credits & References
 

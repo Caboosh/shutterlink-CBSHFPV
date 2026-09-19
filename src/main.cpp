@@ -38,6 +38,7 @@
 #include "web_server.h"
 #include "wifiswitch.h"
 #include "cam_registry.h"
+#include "serial_config.h"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Internal State
@@ -186,6 +187,9 @@ void setup() {
     wifiSwitchInit();
     webInit();
 
+    // ── Web Serial bench config protocol (same USB port as DBG output) ──
+    serialConfigInit();
+
     DBG("SETUP: Complete — entering main loop");
 }
 
@@ -217,7 +221,8 @@ void loop() {
     wifiSwitchUpdate();
     scanResultsEvictStale();   // Evict stale scan entries (TTL 15s)
     webUpdate();
-
+    serialConfigUpdate();
+    
     // 8. Update status LED blink pattern.
     updateStatusLED();
 
