@@ -156,7 +156,7 @@ The on-board status LED (GPIO8 on most C3 boards) blinks the link state:
 
 ```bash
 # 1. Clone
-git clone https://github.com/rover1312/shutterlink.git
+git clone https://github.com/caboosh/shutterlink-CBSHFPV.git
 cd shutterlink
 
 # 2. Build
@@ -329,31 +329,52 @@ buried or hard to reach. Since the C3 is already wired to a free FC UART for
 MSP (see Step 1), the same bench-config protocol also listens on that UART
 (`Serial1`), reachable through **Betaflight's serial passthrough** feature
 via the FC's own, more accessible USB port — no extra cable, no
-disassembly:
+disassembly.
 
-1. Plug the quad into the PC over USB as normal (Betaflight Configurator or
-   CLI).
-2. In the CLI tab, run `serial_passthrough <uart-id> 115200`, where
-   `<uart-id>` is the UART number wired to the ESP32-C3 (the one with MSP
-   enabled in the Ports tab) — or use the Configurator's Ports tab
-   passthrough option if your version exposes one. Betaflight bridges its
-   USB connection straight through to that UART and **stops flying** —
-   this is bench-only, disarmed, never in the air.
-3. Close (or don't otherwise touch) the Configurator so the OS COM port is
-   free, then open the Web Serial bench console and pick that **same COM
-   port** (the FC's, not the C3's) when it prompts you to connect. From the
-   browser's side it's an identical 115200-baud serial connection either
-   way.
-4. A `{"path":"ping"}` reply with `"via":"fc-uart"` confirms you're talking
-   to the C3 through the passthrough bridge rather than a direct cable.
+**One click, no Betaflight Configurator needed:** the bench console
+(`docs/`) drives this itself. Expand **"C3 not reachable over USB? Connect
+via Betaflight passthrough instead"**, enter the **FC UART number** wired to
+the C3 (as printed on the Ports tab, e.g. `3` for UART3 — not a zero-based
+index, the page converts that for you) and the baud rate (matches
+`FC_UART_BAUD` in `config.h`, 115200 by default), then hit **Connect via FC
+passthrough**. Behind the scenes the page:
+
+1. Opens the FC's own USB serial port directly via Web Serial.
+2. Sends `#` to force a live MSP connection into CLI mode (harmless if it's
+   already there — Betaflight just reprints the prompt), the same nudge
+   Betaflight Configurator's own CLI tab uses.
+3. Sends `serialpassthrough <id> <baud>` (`<id>` = UART number − 1 — that's
+   how the CLI command addresses ports). Betaflight bridges its USB
+   connection straight through to that UART and **stops flying** — this is
+   bench-only, disarmed, never in the air.
+4. Keeps using that *same* already-open connection as the ShutterLink JSON
+   channel from that point on — no second app, no picking a different COM
+   port, no reconnecting.
+
+This is the same trick [ExpressLRS's own flashing tool](https://github.com/ExpressLRS/ExpressLRS)
+uses to reach a receiver wired to an FC UART (`BFinitPassthrough.py`): plain
+CLI automation, not a special binary MSP command. A `{"path":"ping"}` reply
+with `"via":"fc-uart"` (shown in the console log right after connecting)
+confirms you're actually talking to the C3 through the bridge and not, say,
+a stale MSP session that never switched over.
+
+If you'd rather drive it by hand (e.g. debugging a passthrough issue,
+or a browser build where the automated CLI nudge doesn't behave): open
+Betaflight Configurator's CLI tab yourself, run
+`serialpassthrough <uart-id> <baud>` (UART numbers there are already
+0-based), close the Configurator so the OS COM port is free, then use the
+plain **"Connect over USB"** button and pick that same COM port when
+prompted — from the browser's side it's an identical serial connection
+either way.
 
 Caveats while a passthrough session is open: the FC isn't running its own
 firmware, so the ESP32 loses live FC telemetry (arm state, RC-switch
-polling, OSD pushes) until you end the passthrough session and reboot/
-reconnect the FC normally — and `{"path":"msp",...}` on this channel always
-replies with an error, since there's no independent live FC left on the
-wire to bounce the MSP request off. Use the direct USB cable for MSP
-passthrough; use the FC-UART/passthrough route for everything else
+polling, OSD pushes) until you **power-cycle the FC** — passthrough doesn't
+end on its own, and a normal reboot/reconnect isn't enough — and
+`{"path":"msp",...}` on this channel always replies with an error, since
+there's no independent live FC left on the wire to bounce the MSP request
+off. Use the direct USB cable for MSP passthrough; use the
+FC-UART/passthrough route for everything else
 (`ping`/`status`/`settings`/`camera`/`command`).
 
 The logic behind both transports lives once, in `api_core.cpp` — `web_server.cpp`'s

@@ -19,6 +19,26 @@
   </div>
 </header>
 
+<details class="passthrough-panel" id="passthroughPanel">
+  <summary>C3 not reachable over USB? Connect via Betaflight passthrough instead</summary>
+  <div class="row">
+    <label>FC UART # (Ports tab, wired to the C3)
+      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
+    </label>
+    <label>Baud
+      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
+    </label>
+    <button id="btnConnectPassthrough" class="btn">Connect via FC passthrough</button>
+  </div>
+  <p class="hint">
+    Opens the FC's own USB port, drives its CLI the way Betaflight Configurator's CLI tab does
+    (<code>#</code> then <code>serialpassthrough &lt;uart&gt; &lt;baud&gt;</code>), then talks to the
+    C3 straight over that same connection — no Configurator window, no reconnecting to a different
+    port. The FC stops flying the instant passthrough starts and needs a power cycle afterwards to
+    fly again, so this is a bench/disarmed-only connection method, same as the direct USB one.
+  </p>
+</details>
+
 <p class="unsupported" id="unsupportedNotice" hidden>
   Your browser doesn't support the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>.
   Use a recent Chrome, Edge, or Opera desktop build. Also note Web Serial requires a secure context —

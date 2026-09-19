@@ -55,6 +55,23 @@ h3 { font-size: 12px; margin: 16px 0 6px; text-transform: uppercase; letter-spac
 
 .conn-controls { display: flex; align-items: center; gap: 10px; }
 
+.passthrough-panel {
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+}
+.passthrough-panel summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.passthrough-panel summary:hover { color: var(--text); }
+.passthrough-panel .row { margin-top: 12px; align-items: flex-end; }
+.passthrough-panel label { margin: 0; min-width: 140px; }
+.passthrough-panel input { width: auto; }
+
 .unsupported {
   margin: 16px 20px;
   padding: 12px 14px;
