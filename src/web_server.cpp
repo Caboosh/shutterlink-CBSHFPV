@@ -195,7 +195,7 @@ static void handleStatus() {
         "\"cam\":{\"type\":%d,\"name\":\"%s\",\"state\":%d,"
         "\"stateName\":\"%s\",\"batt\":%d,\"recTime\":%u,\"valid\":%s,"
         "\"model\":\"%s\"},"
-        "\"rec\":{\"desired\":%s,\"switchOn\":%s,\"roa\":%s,\"rcValue\":%u,"
+        "\"rec\":{\"desired\":%s,\"switchOn\":%s,\"roa\":%s,\"sod\":%s,\"sodDelay\":%u,\"rcValue\":%u,"
         "\"auxCh\":%u,\"thr\":%u,\"deb\":%u},"
         "\"slots\":[%d,%d,%d,%d],"
         "\"osd\":[\"%s\",\"%s\",\"%s\",\"%s\"],"
@@ -211,6 +211,8 @@ static void handleStatus() {
         recorderDesiredRecording() ? "true" : "false",
         recorderSwitchOn() ? "true" : "false",
         cfg.recordOnArm ? "true" : "false",
+        cfg.stopOnDisarm ? "true" : "false",
+        cfg.stopOnDisarmDelayMs,
         recorderLastRcValue(),
         cfg.auxChannelIndex, cfg.rcThresholdUs, cfg.debounceMs,
         cfg.osdSlot[0], cfg.osdSlot[1], cfg.osdSlot[2], cfg.osdSlot[3],
@@ -248,10 +250,11 @@ static void handleSettingsPost() {
         !jsonHas(body, "slot2") && !jsonHas(body, "slot3") &&
         !jsonHas(body, "wifiSwitch") && !jsonHas(body, "scanAll") &&
         !jsonHas(body, "threshold") && !jsonHas(body, "debounce") &&
-        !jsonHas(body, "stopOnDisarm")) {
+        !jsonHas(body, "stopOnDisarm") && !jsonHas(body, "stopOnDisarmDelay")) {
         sendJsonError("no recognized keys");
         return;
     }
+
 
     ShutterSettings &cfg = settingsGet();
     bool apNeedsRestart = false;
@@ -291,6 +294,11 @@ static void handleSettingsPost() {
         cfg.recordOnArm = jsonGetBool(body, "recordOnArm");
     if (jsonHas(body, "stopOnDisarm"))
         cfg.stopOnDisarm = jsonGetBool(body, "stopOnDisarm");
+    if (jsonHas(body, "stopOnDisarmDelay")) {
+        long d = jsonGetNum(body, "stopOnDisarmDelay");
+        if (d < 0 || d > 15000) { sendJsonError("stop-on-disarm delay out of range"); return; }
+        cfg.stopOnDisarmDelayMs = (uint16_t)d;
+    }
 
     // "Show all nearby devices" toggle (NVS-persisted, no AP restart).
     if (jsonHas(body, "scanAll"))
@@ -707,6 +715,7 @@ void webStart() {
 
     WiFi.persistent(false);              // Keep Wi-Fi creds out of NVS
     WiFi.mode(WIFI_AP);
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
     delay(100);
 
     // Deterministic AP address: 192.168.4.1/24 (matches UI + captive portal).

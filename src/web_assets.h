@@ -344,6 +344,13 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:18px 0 6px}
         <p>Stop the recording when the FC disarms. If off, keep recording until
         the switch goes low or you stop it here.</p></div>
     </div>
+    <div class="field" id="sodDelayField" style="opacity:.55;transition:var(--tr)">
+      <label>Stop delay<span id="lblSodDelay">0 s</span></label>
+      <input type="range" id="rngSodDelay" min="0" max="15000" step="500" value="0">
+      <div class="note">Grace period after disarm before the camera actually
+        stops — handy if you disarm to trigger Crash Flip and might re-arm
+        again. Re-arming within this window cancels the stop.</div>
+    </div>
     <div style="margin-top:16px"><button class="btn primary" id="saveBeh">Save behaviour</button></div>
     <div class="note">The record switch always overrides: flipping it OFF clears an
       armed-start. Camera commands are absolute start/stop — never toggles — so
@@ -525,6 +532,7 @@ if (typeof toast !== 'function') {
 'use strict';
 const $=id=>document.getElementById(id);
 let S=null;
+let pendingBrand;
 let settingsLoaded=false;
 
 /* ---------- render helpers (must be before render() is called) ---------- */
@@ -532,6 +540,7 @@ const ST_COLORS={READY:'var(--ok)',CONNECTING:'var(--warn)',PAIRING:'var(--warn)
   SCANNING:'var(--warn)',OFF:'var(--dim)'};
 function chLabel(i){return i<4?('CH'+(i+1)):('CH'+(i+1)+' AUX'+(i-3));}
 function mmss(s){s=Math.max(0,s|0);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function humanTime(s){s=Math.max(0,s|0);if(s<60)return s+'s';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);if(h>0)return m>0?h+'h'+m+'m':h+'h';return m+'m';}
 
 /* ---------- Load initial settings on page load ---------- */
 async function loadInitialSettings(){
@@ -545,8 +554,11 @@ async function loadInitialSettings(){
       if($('selCh'))$('selCh').value=(rec.auxCh!=null)?rec.auxCh:8;
       if($('rngThr')){$('rngThr').value=rec.thr||1500;fill($('rngThr'));$('lblThr').textContent=$('rngThr').value+' µs';}
       if($('rngDeb')){$('rngDeb').value=rec.deb||300;fill($('rngDeb'));$('lblDeb').textContent=$('rngDeb').value+' ms';}
-      if($('swRoa'))$('swRoa').checked=!!S.roa;
-      if($('swSod')){$('swSod').disabled=!S.roa;$('swSod').parentElement.parentElement.style.opacity=S.roa?1:.55;}
+      if($('swRoa'))$('swRoa').checked=!!S.rec?.roa;
+      if($('swSod')){$('swSod').disabled=!S.rec?.roa;$('swSod').parentElement.parentElement.style.opacity=S.rec?.roa?1:.55;}
+      if($('rngSodDelay')){$('rngSodDelay').value=S.rec?.sodDelay||0;fill($('rngSodDelay'));
+        $('lblSodDelay').textContent=($('rngSodDelay').value/1000)+' s';
+        $('sodDelayField').style.opacity=S.rec?.roa&&S.rec?.sod!=false?1:.55;}
       if($('selWifiCh'))$('selWifiCh').value=(S.wifiSwitch!=null&&S.wifiSwitch>=0)?S.wifiSwitch:255;
       // Set brand pills based on loaded camera type
       pendingBrand=S.cam?S.cam.type:-1;
@@ -602,7 +614,13 @@ const SLOT_NAMES=['Off','Cam status','Rec time','Battery','Link state','FC batte
 function fill(r){r.style.setProperty('--p',((r.value-r.min)/(r.max-r.min)*100)+'%');}
 $('rngThr').oninput=e=>{fill(e.target);$('lblThr').textContent=e.target.value+' \u00b5s';};
 $('rngDeb').oninput=e=>{fill(e.target);$('lblDeb').textContent=e.target.value+' ms';};
-fill($('rngThr'));fill($('rngDeb'));
+$('rngSodDelay').oninput=e=>{fill(e.target);$('lblSodDelay').textContent=(e.target.value/1000)+' s';};
+fill($('rngThr'));fill($('rngDeb'));fill($('rngSodDelay'));
+$('swSod').onchange=()=>{
+  const on=$('swSod').checked;
+  $('sodDelayField').style.opacity=on?1:.55;
+  $('rngSodDelay').disabled=!on;
+};
 
 /* ---------- API helpers ---------- */
 async function api(url,obj,method='POST'){
@@ -642,7 +660,8 @@ $('saveCtrl').onclick=async()=>{
 $('saveBeh').onclick=async()=>{
   try{
     const j=await api('/api/settings',{recordOnArm:$('swRoa').checked,
-      stopOnDisarm:$('swSod').checked});
+      stopOnDisarm:$('swSod').checked,
+      stopOnDisarmDelay:+$('rngSodDelay').value});
     toast(j.ok?'Behaviour saved':'Error: '+(j.error||'?'));
   }catch(e){console.error('saveBeh error:',e);toast('Error: '+e.message);}
 };
@@ -1127,7 +1146,7 @@ function render(){
   } else {
     chip.textContent=r.desired?'RECORDING':'STANDBY';
     chip.className='chip '+(r.desired?'rec':'ok');
-    tEl.textContent=(c.recTime!=null)?mmss(c.recTime):'--:--';
+    tEl.textContent=(c.recTime!=null)?(r.desired?mmss(c.recTime):humanTime(c.recTime)):'--:--';
     tEl.style.color=r.desired?'var(--rec)':'var(--txt)';
     $('statecap').textContent=(c.model||c.name||'camera')+' \u00b7 ready';
   }
@@ -1191,9 +1210,12 @@ async function poll(){
         $('lblThr').textContent=$('rngThr').value+' \u00b5s';}
       if(ae!==$('rngDeb')){$('rngDeb').value=rec.deb||300;fill($('rngDeb'));
         $('lblDeb').textContent=$('rngDeb').value+' ms';}
-      if(ae!==$('swRoa'))$('swRoa').checked=!!S.roa;
-      $('swSod').disabled=!S.roa;
-      $('swSod').parentElement.parentElement.style.opacity=S.roa?1:.55;
+      if(ae!==$('swRoa'))$('swRoa').checked=!!rec?.roa;
+      $('swSod').disabled=!rec?.roa;
+      $('swSod').parentElement.parentElement.style.opacity=rec?.roa?1:.55;
+      if($('rngSodDelay')){$('rngSodDelay').value=rec.sodDelay||0;fill($('rngSodDelay'));
+        $('lblSodDelay').textContent=($('rngSodDelay').value/1000)+' s';
+        $('sodDelayField').style.opacity=S.rec?.roa&&S.rec?.sod!=false?1:.55;}
       if(ae!==$('selWifiCh'))$('selWifiCh').value=(S.wifiSwitch!=null&&S.wifiSwitch>=0)?S.wifiSwitch:255;
       // brand pills reflect the live backend brand only when user has NOT
       // already picked a pending brand.

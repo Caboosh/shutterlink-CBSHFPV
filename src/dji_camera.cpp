@@ -64,6 +64,8 @@ static size_t  buildDumlPacket(uint8_t *buffer, uint8_t sender, uint8_t receiver
                                const uint8_t *payload, size_t payloadLen);
 static uint8_t  crc8_dji(const uint8_t *data, size_t len);
 static uint16_t crc16_dji(const uint8_t *data, size_t len);
+static bool     _wasRecording  = false;
+static uint32_t _recordStartMs = 0;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // BLE Callbacks
@@ -493,8 +495,8 @@ static void notifyCallback(NimBLERemoteCharacteristic *pChar, uint8_t *pData,
     uint8_t cmdSet = pData[9];
     uint8_t cmdId = pData[10];
 
-    DBG("DJI: <<< DUML [%s] flags=0x%02X set=0x%02X id=0x%02X len=%d",
-        charName, flags, cmdSet, cmdId, length);
+/*     DBG("DJI: <<< DUML [%s] flags=0x%02X set=0x%02X id=0x%02X len=%d",
+        charName, flags, cmdSet, cmdId, length) */;
 
     // Check for Pairing Status Response (flags=0xC0, set=0x07, id=0x45)
     // Payload: [00][status] — status 0x01 = already paired, 0x02 = approval
@@ -548,11 +550,74 @@ static void notifyCallback(NimBLERemoteCharacteristic *pChar, uint8_t *pData,
         }
     }
 
-    // Unsolicited Telemetry (flags=0x00)
-    if (flags == 0x00) {
+    // General Status Push (flags=0x00, set=0x02, id=0x80).
+    // pData[11]: 0x01 idle, 0x41 arming/starting, 0x81 recording (bit 0x80 = active).
+    // pData[15]: 0x01 video mode, 0x00 photo mode (unused on this build — FPV-only).
+    // pData[20:21] LE: storage counter (decreases while writing) — unit TBD.
+    // pData[28:29] LE: estimated remaining record time (standby only).
+    if (flags == 0x00 && cmdSet == 0x02 && cmdId == 0x80 && length >= 30) {
         _telemetry.dataValid = true;
-        // Basic parsing can be added here once we see the exact telemetry CmdSet/Id
+
+        uint8_t recByte     = pData[11];
+        bool    isRecording = (recByte & 0x80) != 0;
+
+        if (isRecording)           _telemetry.state = CAM_STATE_RECORDING;
+        else if (recByte == 0x01)  _telemetry.state = CAM_STATE_STANDBY;
+        // 0x41 (arming) intentionally left as previous state — too brief to act on yet
+
+        // Edge-detect standby -> recording so the elapsed-time clock starts
+        // from the moment recording actually began, not from whenever the
+        // Web UI next polls /api/status.
+        if (isRecording && !_wasRecording) {
+            _recordStartMs = millis();
+        }
+        _wasRecording = isRecording;
+
+        _telemetry.captureMode = pData[15];
+        _telemetry.storageRaw  = pData[20] | (pData[21] << 8);
+
+        if (isRecording) {
+            // While recording: locally-tracked ELAPSED time (camera doesn't
+            // push this directly — pData[28:29] goes stale/irrelevant here).
+            _telemetry.recTimeSeconds = (uint16_t)((millis() - _recordStartMs) / 1000);
+        } else {
+            // Standby: camera's own estimated REMAINING record time.
+            _telemetry.recTimeSeconds = pData[28] | (pData[29] << 8);
+        }
     }
+
+    // Battery Status Push (flags=0x00, set=0x0D, id=0x02).
+    // pData[31]: battery % — confirmed against real drain across two sessions.
+    if (flags == 0x00 && cmdSet == 0x0D && cmdId == 0x02 && length >= 32) {
+        _telemetry.batteryPercent = pData[31];
+        _telemetry.dataValid = true;
+    }
+
+    // TEMP: per-type throttled, UNtruncated payload dump for the two frame
+    // types we're reverse-engineering (0x02/0x80 general status push,
+    // 0x0D/0x02 battery push). Keyed independently so the fast 0x02/0x80
+    // stream doesn't starve out the once-a-second 0x0D/0x02 heartbeat.
+    // this was done for the Osmo Nano, you may need to change this for your
+    // Osmo Action, though the telemetry here may work with the Action's, 
+    // i just can't test that as i only have the Osmo Nano. left this here
+    // so people can RE the BLE payloads for their DJI camera.
+
+    // static uint32_t _lastDump0280 = 0;
+    // static uint32_t _lastDump0D02 = 0;
+    // uint32_t nowMs = millis();
+    // bool isStatus  = (cmdSet == 0x02 && cmdId == 0x80);
+    // bool isBattery = (cmdSet == 0x0D && cmdId == 0x02);
+    // uint32_t *lastDump = isStatus ? &_lastDump0280 : (isBattery ? &_lastDump0D02 : nullptr);
+
+    // if (lastDump && (nowMs - *lastDump >= 1000)) {
+    //     \*lastDump = nowMs;
+    //     char hexBuf[240] = "";
+    //     size_t hexLen = 0;
+    //     for (size_t i = 0; i < length && hexLen < sizeof(hexBuf) - 4; i++) {
+    //         hexLen += snprintf(hexBuf + hexLen, sizeof(hexBuf) - hexLen, "%02X ", pData[i]);
+    //     }
+    //     DBG("DJI:     [set=0x%02X id=0x%02X len=%d] payload: %s", cmdSet, cmdId, length, hexBuf);
+    // }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

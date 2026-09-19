@@ -23,15 +23,20 @@ enum CameraRecordingState : uint8_t {
 };
 
 struct CameraTelemetry {
-    uint8_t              batteryPercent;    // 0–100 (255 = unknown)
-    uint16_t             recTimeSeconds;    // Total recording time in seconds
+    uint8_t              batteryPercent;
+    uint16_t             recTimeSeconds;    // now: estimated REMAINING record time
     CameraRecordingState state;
-    bool                 dataValid;         // True once we've received telemetry
-    char                 model[24];         // Reported model name (best effort)
+    bool                 dataValid;
+    char                 model[24];
+
+    uint8_t   captureMode;   // 1 = video, 0 = photo (raw byte, mapped in UI layer)
+    uint16_t  storageRaw;    // free-storage counter, unit still TBD
+    bool      photoPending;  // true briefly after a photo capture (pData[24:27] != 0)
 
     CameraTelemetry()
         : batteryPercent(255), recTimeSeconds(0),
-          state(CAM_STATE_UNKNOWN), dataValid(false) {
+          state(CAM_STATE_UNKNOWN), dataValid(false),
+          captureMode(1), storageRaw(0), photoPending(false) {
         model[0] = '\0';
     }
 };
