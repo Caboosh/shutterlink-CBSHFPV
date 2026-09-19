@@ -31,6 +31,18 @@ static bool     _firstRun        = true;
 static void formatMmSs(uint16_t seconds, char *out, size_t len) {
     snprintf(out, len, "%02u:%02u", seconds / 60, seconds % 60);
 }
+/// Human-readable duration for goggle OSD glances — "45s" / "12m" / "2h" / "2h33m".
+static void formatHuman(uint16_t seconds, char *out, size_t len) {
+    if (seconds < 60) { snprintf(out, len, "%us", seconds); return; }
+    uint16_t h = seconds / 3600;
+    uint16_t m = (seconds % 3600) / 60;
+    if (h > 0) {
+        if (m > 0) snprintf(out, len, "%uh%um", h, m);
+        else       snprintf(out, len, "%uh", h);
+    } else {
+        snprintf(out, len, "%um", m);
+    }
+}
 
 /// Build the string for one slot into `buf` (max OSD_MAX_TEXT_LEN chars).
 static void buildSlotString(uint8_t content, char *buf, size_t bufLen) {
@@ -76,7 +88,15 @@ static void buildSlotString(uint8_t content, char *buf, size_t bufLen) {
         case OSD_SLOT_REC_TIME: {
             if (!camIsReady()) { snprintf(buf, bufLen, "REC --:--"); break; }
             uint16_t t = tel.recTimeSeconds;
-            snprintf(buf, bufLen, "REC %02u:%02u", t / 60, t % 60);
+            if (tel.state == CAM_STATE_RECORDING) {
+                // Recording: live elapsed MM:SS, matches the CAM_STATUS slot.
+                snprintf(buf, bufLen, "REC %02u:%02u", t / 60, t % 60);
+            } else {
+                // Standby: human-readable remaining estimate for a quick glance.
+                char h[8];
+                formatHuman(t, h, sizeof(h));
+                snprintf(buf, bufLen, "REC %s", h);
+            }
             break;
         }
 

@@ -14,7 +14,7 @@
 #include <Arduino.h>
 
 // Firmware version string (shown in UI and OTA status endpoint)
-#define FIRMWARE_VERSION "v2.1"
+#define FIRMWARE_VERSION "v2.1-CBSHFPV"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // UART / MSP Configuration
@@ -23,8 +23,8 @@
 // Hardware UART pins for Serial1 (connected to Betaflight FC).
 // On the ESP32-C3 DevKitM-1, any GPIO can be mapped to UART1.
 // Connect FC TX → ESP32 RX_PIN, FC RX → ESP32 TX_PIN.
-#define FC_UART_RX_PIN        20   // GPIO20 — receives data FROM the FC
-#define FC_UART_TX_PIN        21   // GPIO21 — sends data TO the FC
+#define FC_UART_RX_PIN        5   // GPIO5 — receives data FROM the FC
+#define FC_UART_TX_PIN        4   // GPIO4 — sends data TO the FC
 
 // UART baud rate — must match Betaflight serial port config.
 // Betaflight default MSP baud is 115200.
@@ -39,19 +39,23 @@
 
 // Zero-based index of the RC channel used as the "Record" switch.
 // In Betaflight, AUX1 = channel 5 (index 4), AUX4 = channel 8 (index 7), etc.
-#define DEFAULT_AUX_CHANNEL_INDEX 8    // AUX5 — change to match your setup
+#define DEFAULT_AUX_CHANNEL_INDEX 11    // AUX5 — change to match your setup
 
 // Threshold (µs) above which the switch is considered ON (record).
-#define DEFAULT_RC_THRESHOLD_US   1500
+#define DEFAULT_RC_THRESHOLD_US   1800
 
 // Debounce duration in milliseconds for the RC switch.
 #define DEFAULT_RC_DEBOUNCE_MS    300
 
 // Automatically start recording when the flight controller arms.
-#define DEFAULT_RECORD_ON_ARM     false
+#define DEFAULT_RECORD_ON_ARM     true
 
 // When record-on-arm is active, stop recording when the FC disarms.
 #define DEFAULT_STOP_ON_DISARM    true
+
+// Configurable Delay (in ms) when disarmed, allowing for a grace period
+// when turtling out of a crash. 
+#define DEFAULT_STOP_ON_DISARM_DELAY_MS 0 // Default is 0 (old behaviour), change this to increase the delay.
 
 // "Show all nearby devices" in the Camera tab.  When false, the BLE
 // discovery filter accepts only known DJI Osmo / GoPro signatures
@@ -66,7 +70,7 @@
 
 // SoftAP credentials for the Web UI (password empty = open network).
 #define WIFI_AP_DEFAULT_SSID      "ShutterLink"
-#define WIFI_AP_DEFAULT_PASS      "shutterlink"
+#define WIFI_AP_DEFAULT_PASS      ""
 
 // Default content of Betaflight Custom Message slots 1..4 (OsdSlotContent).
 #define DEFAULT_OSD_SLOT_1        OSD_SLOT_CAM_STATUS

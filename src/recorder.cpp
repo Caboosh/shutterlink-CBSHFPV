@@ -22,6 +22,8 @@ static bool     _rcDataValid      = false;   // True after first valid MSP_RC
 // Record-on-arm latch + suppression after manual stop
 static bool     _roaLatched       = false;   // Latched by arming
 static bool     _roaSuppress      = false;   // Manual stop while armed
+static bool     _disarmStopPending = false; 
+static uint32_t _disarmStopAt      = 0;      // Delay Time to stop recording
 
 // Desired state / last sent command
 static bool     _desired          = false;
@@ -58,6 +60,7 @@ static void clearRoaIntent() {
     if (_roaLatched) DBG("REC: record-on-arm latch cleared");
     _roaLatched  = false;
     _roaSuppress = false;
+    _disarmStopPending = false;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -112,12 +115,32 @@ void recorderUpdate() {
             DBG("REC: record-on-arm engaged");
             _roaLatched = true;
         }
+        if (rising && _disarmStopPending) {
+            // Re-armed before the delayed stop fired (e.g. Crash Flip
+            // recovery) — cancel it, keep recording.
+            DBG("REC: re-armed — delayed stop cancelled");
+            _disarmStopPending = false;
+        }
         if (!rising && cfg.stopOnDisarm) {
-            clearRoaIntent();   // Disarm stops recording (default behaviour)
+            if (cfg.stopOnDisarmDelayMs == 0) {
+                clearRoaIntent();   // unchanged immediate behaviour
+            } else {
+                DBG("REC: disarmed — stop delayed %u ms", cfg.stopOnDisarmDelayMs);
+                _disarmStopPending = true;
+                _disarmStopAt      = now + cfg.stopOnDisarmDelayMs;
+            }
         }
         if (!fc.armed) {
-            _roaSuppress = false;  // Fresh arming may latch again
+            _roaSuppress = false;
         }
+    }
+
+    // ── Delayed stop-on-disarm: fire once the grace period elapses,
+    //    but only if we're still disarmed (re-arm above cancels this) ──
+    if (_disarmStopPending && !fc.armed &&
+        (int32_t)(now - _disarmStopAt) >= 0) {
+        _disarmStopPending = false;
+        clearRoaIntent();
     }
 
     // ── Compute desired state ───────────────────────────────────────────
