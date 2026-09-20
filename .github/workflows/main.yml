@@ -26,7 +26,7 @@ jobs:
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-output
+          name: firmware.bin
           path: |
             ~/.pio/build/esp32c3/
           retention-days: 10
