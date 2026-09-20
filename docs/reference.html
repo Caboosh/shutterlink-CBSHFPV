@@ -221,13 +221,14 @@
         <div class="table-wrap">
           <table>
             <tr><th>Define</th><th>Default</th><th>Purpose</th></tr>
-            <tr><td><code>FC_UART_RX_PIN</code> / <code>FC_UART_TX_PIN</code></td><td>20 / 21</td><td>UART pins to the FC</td></tr>
-            <tr><td><code>DEFAULT_CAMERA_TYPE</code></td><td>DJI</td><td>Initial camera backend</td></tr>
-            <tr><td><code>DEFAULT_AUX_CHANNEL_INDEX</code></td><td>8</td><td>RC channel used as record switch</td></tr>
-            <tr><td><code>DEFAULT_RC_THRESHOLD_US</code></td><td>1500</td><td>µs above = ON</td></tr>
+            <tr><td><code>FC_UART_RX_PIN</code> / <code>FC_UART_TX_PIN</code></td><td>5 / 4</td><td>UART pins to the FC</td></tr>
+            <tr><td><code>DEFAULT_CAMERA_TYPE</code></td><td>CAMERA_DJI</td><td>Initial camera backend</td></tr>
+            <tr><td><code>DEFAULT_AUX_CHANNEL_INDEX</code></td><td>4</td><td>RC channel used as record switch</td></tr>
+            <tr><td><code>DEFAULT_RC_THRESHOLD_US</code></td><td>1800</td><td>µs above = ON</td></tr>
             <tr><td><code>DEFAULT_RC_DEBOUNCE_MS</code></td><td>300</td><td>Switch debounce</td></tr>
             <tr><td><code>DEFAULT_RECORD_ON_ARM</code></td><td>false</td><td>Auto-record on arming</td></tr>
             <tr><td><code>DEFAULT_STOP_ON_DISARM</code></td><td>true</td><td>Stop when FC disarms</td></tr>
+            <tr><td><code>DEFAULT_STOP_ON_DISARM_DELAY_MS</code></td><td>0</td><td>Configurable Delay (in ms) when disarmed, allowing for a grace period when turtling out of a crash</td></tr>
             <tr><td><code>DEFAULT_SCAN_ALL</code></td><td>false</td><td>Show all BLE advertisers during discovery</td></tr>
             <tr><td><code>DEFAULT_WIFI_SWITCH_CH</code></td><td>255 (off)</td><td>AUX channel toggling the Wi-Fi AP</td></tr>
             <tr><td><code>WIFI_AP_DEFAULT_SSID</code> / <code>_PASS</code></td><td>ShutterLink / shutterlink</td><td>Web UI hotspot</td></tr>
