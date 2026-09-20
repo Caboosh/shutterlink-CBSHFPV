@@ -41,6 +41,13 @@ let pendingTimer = null;
 let statusPollTimer = null;
 let formsPopulated = false;
 
+// Which function gets each decoded line from the port. Normally this is
+// handleLine() (the JSON protocol dispatcher), but the FC-passthrough
+// bootstrap below temporarily redirects it to watch the FC's own CLI text
+// (the `serial` listing, the `serialpassthrough` confirmation) before
+// switching it back once the bridge is actually up.
+let onLine = handleLine;
+
 // ──────────────────────────────────────────────────────────────────────────
 // DOM helpers
 // ──────────────────────────────────────────────────────────────────────────
@@ -75,9 +82,48 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function writeLine(text) {
+  return writer.write(new TextEncoder().encode(text.endsWith("\n") ? text : text + "\n"));
+}
+
+/// Redirect incoming lines to `collect` for `timeoutMs`, or until `stopWhen`
+/// (if given) returns true for a line — whichever comes first. Every line
+/// seen is still echoed to the raw log (as CLI chatter, not JSON) so the
+/// bootstrap is fully visible/debuggable. Resolves with { matched, lines },
+/// never rejects — a timeout with no match is a normal outcome the caller
+/// decides how to handle (CLI banners/prompts vary too much across
+/// Betaflight versions to treat "didn't see X" as an error by itself).
+function collectLines(timeoutMs, stopWhen) {
+  return new Promise((resolve) => {
+    const lines = [];
+    let settled = false;
+    const prevOnLine = onLine;
+    const finish = (matched) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      onLine = prevOnLine;
+      resolve({ matched: matched || null, lines });
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    onLine = (line) => {
+      logLine(line, "log-dbg");
+      lines.push(line);
+      if (stopWhen && stopWhen(line)) finish(line);
+    };
+  });
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Web Serial plumbing
 // ──────────────────────────────────────────────────────────────────────────
+
+function ensureReadLoop() {
+  if (readLoopPromise) return;
+  readLoopPromise = readLoop().catch((err) => {
+    if (connected) logLine(`[console] read error: ${err.message}`, "err");
+  });
+}
 
 /// Common tail once `port` is open and `writer` is grabbed, regardless of
 /// which path got us there (direct USB, or FC passthrough below).
@@ -87,9 +133,8 @@ function finishConnect(via) {
 
   port.addEventListener("disconnect", handleUnexpectedDisconnect);
 
-  readLoopPromise = readLoop().catch((err) => {
-    if (connected) logLine(`[console] read error: ${err.message}`, "err");
-  });
+  onLine = handleLine;
+  ensureReadLoop();
 
   statusPollTimer = setInterval(pollStatus, 1000);
 
@@ -123,19 +168,42 @@ async function connect() {
 // Betaflight passthrough bootstrap
 // ──────────────────────────────────────────────────────────────────────────
 // One click in place of: open Betaflight Configurator → CLI tab →
-// `serialpassthrough <uart> <baud>` → close Configurator → come back here
-// and reconnect to the same COM port. We drive the FC's CLI ourselves over
-// the port we just opened and then keep using that SAME connection as the
+// `serialpassthrough …` → close Configurator → come back here and
+// reconnect to the same COM port. We drive the FC's CLI ourselves over the
+// port we just opened and then keep using that SAME connection as the
 // ShutterLink JSON channel — no second app, no reconnect.
 //
 // This is the same technique ExpressLRS's own flashing tool
 // (BFinitPassthrough.py) uses to reach a receiver wired to an FC UART:
 // plain CLI automation ('#' to force CLI mode, then `serialpassthrough`),
 // not a special binary MSP command.
+//
+// `serialpassthrough`'s own argument syntax has changed between Betaflight
+// versions:
+//   • pre-25.12: a zero-based numeric port id (UART3 -> "2"), and the
+//     `serial` command's listing was numeric-only too.
+//   • 25.12+: the `serial` command now names each port ("serial UART4 …")
+//     and `serialpassthrough` takes that same name directly
+//     ("serialpassthrough UART4 115200") — a bare numeric id now fails
+//     with "Invalid port1".
+// Rather than hardcode one scheme (and break on the other), we run `serial`
+// ourselves first and read which style this firmware actually prints.
 const FC_CLI_SETTLE_MS = 400;
-const FC_PASSTHROUGH_SETTLE_MS = 300;
 const LS_UART_KEY = "shutterlink.fcUartNumber";
 const LS_BAUD_KEY = "shutterlink.fcUartBaud";
+
+/// Pick the argument `serialpassthrough` wants for `uartNumber`, based on
+/// what the `serial` command actually printed (see block comment above).
+function resolvePassthroughTarget(serialLines, uartNumber) {
+  const namedRe = new RegExp(`^serial\\s+(UART${uartNumber})\\b`, "i");
+  for (const line of serialLines) {
+    const m = line.match(namedRe);
+    if (m) return { target: m[1].toUpperCase(), style: "named (25.12+)" };
+  }
+  // No matching named line seen (older firmware, or a differently-worded
+  // listing) — fall back to the legacy zero-based numeric id.
+  return { target: String(uartNumber - 1), style: "numeric id (pre-25.12, guessed)" };
+}
 
 async function connectViaFcPassthrough() {
   if (!("serial" in navigator)) {
@@ -164,19 +232,32 @@ async function connectViaFcPassthrough() {
 
   writer = port.writable.getWriter();
   logLine(`[console] opened FC port at ${baud} baud, requesting CLI…`);
+  onLine = (line) => logLine(line, "log-dbg"); // just echo CLI chatter until the bridge is up
+  ensureReadLoop();
 
   try {
     // Nudge a live MSP connection into CLI mode. Harmless if the FC is
-    // already sitting at a CLI prompt (it just reprints it).
-    await writer.write(new TextEncoder().encode("#\n"));
+    // already sitting at a CLI prompt (it just reprints it) — banner text
+    // varies too much across versions to gate on, so this is just pacing.
+    await writeLine("#");
     await sleep(FC_CLI_SETTLE_MS);
 
-    // Betaflight's `serialpassthrough` takes a zero-based UART identifier,
-    // not the number printed on the Ports tab: UART1 -> 0, UART2 -> 1, …
-    const uartId = uartNumber - 1;
-    logLine(`[console] entering passthrough on UART${uartNumber} (id ${uartId}) @ ${baud}…`);
-    await writer.write(new TextEncoder().encode(`serialpassthrough ${uartId} ${baud}\n`));
-    await sleep(FC_PASSTHROUGH_SETTLE_MS);
+    logLine("[console] checking this firmware's serialpassthrough argument style…");
+    await writeLine("serial");
+    const serialResp = await collectLines(500);
+    const { target, style } = resolvePassthroughTarget(serialResp.lines, uartNumber);
+    logLine(`[console] using ${style} — target "${target}"`);
+
+    logLine(`[console] entering passthrough on ${target} @ ${baud}…`);
+    await writeLine(`serialpassthrough ${target} ${baud}`);
+    const result = await collectLines(1200, (line) => /forwarding/i.test(line) || /invalid port/i.test(line));
+
+    if (result.matched && /invalid port/i.test(result.matched)) {
+      throw new Error(`FC rejected "${target}" — ${result.matched.trim()}`);
+    }
+    if (!result.matched) {
+      logLine('[console] no "Forwarding" confirmation seen — continuing anyway, check the raw log above', "err");
+    }
   } catch (err) {
     logLine(`[console] failed to enter passthrough: ${err.message}`, "err");
     await teardown();
@@ -216,9 +297,17 @@ async function teardown() {
   reader = null;
   writer = null;
   port = null;
+  readLoopPromise = null;
+  onLine = handleLine;
   rejectPending(new Error("disconnected"));
 }
 
+/// Pumps decoded lines from the port to whatever `onLine` currently points
+/// at — handleLine() once fully connected, or a temporary bootstrap
+/// collector while connectViaFcPassthrough() is still driving the FC's
+/// CLI (see collectLines() above). Only ever one reader on the port at a
+/// time, so this — not the bootstrap code — is the sole owner of
+/// port.readable; the bootstrap just redirects where lines go.
 async function readLoop() {
   const decoder = new TextDecoderStream();
   const inputDone = port.readable.pipeTo(decoder.writable).catch(() => {});
@@ -234,7 +323,7 @@ async function readLoop() {
       while ((idx = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, idx).replace(/\r$/, "");
         buf = buf.slice(idx + 1);
-        if (line.length > 0) handleLine(line);
+        if (line.length > 0) onLine(line);
       }
     }
   } finally {
