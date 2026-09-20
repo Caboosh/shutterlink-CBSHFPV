@@ -32,10 +32,11 @@
   </div>
   <p class="hint">
     Opens the FC's own USB port, drives its CLI the way Betaflight Configurator's CLI tab does
-    (<code>#</code> then <code>serialpassthrough &lt;uart&gt; &lt;baud&gt;</code>), then talks to the
-    C3 straight over that same connection — no Configurator window, no reconnecting to a different
-    port. The FC stops flying the instant passthrough starts and needs a power cycle afterwards to
-    fly again, so this is a bench/disarmed-only connection method, same as the direct USB one.
+    (<code>#</code>, then <code>serial</code> to check which argument style this firmware wants,
+    then <code>serialpassthrough</code>), then talks to the C3 straight over that same connection —
+    no Configurator window, no reconnecting to a different port. The FC stops flying the instant
+    passthrough starts and needs a power cycle afterwards to fly again, so this is a
+    bench/disarmed-only connection method, same as the direct USB one.
   </p>
 </details>
 

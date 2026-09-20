@@ -343,11 +343,16 @@ passthrough**. Behind the scenes the page:
 2. Sends `#` to force a live MSP connection into CLI mode (harmless if it's
    already there — Betaflight just reprints the prompt), the same nudge
    Betaflight Configurator's own CLI tab uses.
-3. Sends `serialpassthrough <id> <baud>` (`<id>` = UART number − 1 — that's
-   how the CLI command addresses ports). Betaflight bridges its USB
-   connection straight through to that UART and **stops flying** — this is
-   bench-only, disarmed, never in the air.
-4. Keeps using that *same* already-open connection as the ShutterLink JSON
+3. Sends `serial` and reads the reply to work out which argument style
+   `serialpassthrough` wants on *this* firmware — see the version note
+   below, this changed recently and the console no longer guesses.
+4. Sends `serialpassthrough <target> <baud>` with whatever it just
+   determined `<target>` to be, and watches for the FC's own
+   `Forwarding, power cycle to exit.` confirmation (or an `Invalid port`
+   error, which it surfaces instead of pressing on blind). Betaflight
+   bridges its USB connection straight through to that UART and **stops
+   flying** — this is bench-only, disarmed, never in the air.
+5. Keeps using that *same* already-open connection as the ShutterLink JSON
    channel from that point on — no second app, no picking a different COM
    port, no reconnecting.
 
@@ -358,11 +363,26 @@ with `"via":"fc-uart"` (shown in the console log right after connecting)
 confirms you're actually talking to the C3 through the bridge and not, say,
 a stale MSP session that never switched over.
 
-If you'd rather drive it by hand (e.g. debugging a passthrough issue,
-or a browser build where the automated CLI nudge doesn't behave): open
-Betaflight Configurator's CLI tab yourself, run
-`serialpassthrough <uart-id> <baud>` (UART numbers there are already
-0-based), close the Configurator so the OS COM port is free, then use the
+> **`serialpassthrough` argument syntax varies by Betaflight version** —
+> confirmed against real hardware, not just docs:
+> - **pre-25.12:** a zero-based numeric port id, e.g. `serialpassthrough 2
+>   115200` for UART3. The `serial` command's own listing was numeric-only
+>   too.
+> - **25.12+:** `serial` now names each port (`serial UART4 1 115200 …`)
+>   and `serialpassthrough` takes that same name directly —
+>   `serialpassthrough UART4 115200`. A bare numeric id now fails with
+>   `Invalid port1`.
+>
+> The bench console runs `serial` itself first and reads which style this
+> firmware actually prints, rather than assuming one — see
+> `resolvePassthroughTarget()` in `docs/app.js` if you're debugging this by
+> hand.
+
+If you'd rather drive it by hand (e.g. debugging a passthrough issue, or a
+browser build where the automated CLI nudge doesn't behave): open Betaflight
+Configurator's CLI tab yourself, run `serial` to see which style your
+firmware wants, then `serialpassthrough <target> <baud>` per the version
+note above, close the Configurator so the OS COM port is free, then use the
 plain **"Connect over USB"** button and pick that same COM port when
 prompted — from the browser's side it's an identical serial connection
 either way.
