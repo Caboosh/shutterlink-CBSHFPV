@@ -31,16 +31,21 @@ static bool     _firstRun        = true;
 static void formatMmSs(uint16_t seconds, char *out, size_t len) {
     snprintf(out, len, "%02u:%02u", seconds / 60, seconds % 60);
 }
-/// Human-readable duration for goggle OSD glances — "45s" / "12m" / "2h" / "2h33m".
+/// Human-readable duration for goggle OSD glances — "45S" / "12M" / "2H" / "2H33M".
+/// Uppercase on purpose: most Betaflight/analog OSD fonts don't have real
+/// lowercase glyphs -- the a-o range is repurposed for heading/compass icons
+/// and p-z for unit/status icons, so a lowercase "h"/"m"/"s" here renders as
+/// the wrong icon on real hardware instead of the letter. See the Bench
+/// Console's OSD live preview for a visual of exactly this.
 static void formatHuman(uint16_t seconds, char *out, size_t len) {
-    if (seconds < 60) { snprintf(out, len, "%us", seconds); return; }
+    if (seconds < 60) { snprintf(out, len, "%uS", seconds); return; }
     uint16_t h = seconds / 3600;
     uint16_t m = (seconds % 3600) / 60;
     if (h > 0) {
-        if (m > 0) snprintf(out, len, "%uh%um", h, m);
-        else       snprintf(out, len, "%uh", h);
+        if (m > 0) snprintf(out, len, "%uH%uM", h, m);
+        else       snprintf(out, len, "%uH", h);
     } else {
-        snprintf(out, len, "%um", m);
+        snprintf(out, len, "%uM", m);
     }
 }
 

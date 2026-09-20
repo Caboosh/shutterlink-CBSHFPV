@@ -14,7 +14,7 @@
 #include <Arduino.h>
 
 // Firmware version string (shown in UI and OTA status endpoint)
-#define FIRMWARE_VERSION "v2.1-CBSHFPV"
+#define FIRMWARE_VERSION "v2.1.1-CBSHFPV"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // UART / MSP Configuration
@@ -48,6 +48,15 @@
 // retry room to succeed cleanly while still resuming normal FC polling
 // reasonably promptly once a bench session actually ends.
 #define FC_UART_BENCH_IDLE_MS 8000
+
+// Raw bytes per OTA firmware chunk on the Web Serial bench protocol
+// (serial_config.cpp's "ota"/"chunk" command). That protocol is line-
+// oriented JSON with a 512-byte LineAssembler buffer per port (see
+// serial_config.cpp), so firmware bytes travel base64-encoded -- 256 raw
+// bytes -> 344 base64 chars, plus ~41 bytes of JSON wrapper, comfortably
+// under the 511-byte usable line length with room to spare. Mirrored in
+// docs/app.js as OTA_CHUNK_BYTES; keep the two in sync if this changes.
+#define OTA_CHUNK_MAX_BYTES 256
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Default User Settings (editable at runtime via Web UI / stored in NVS)

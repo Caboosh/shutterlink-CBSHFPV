@@ -31,6 +31,10 @@
 //                     {"path":"camera",   ...same fields /api/camera takes}
 //                     {"path":"command","cmd":"start"|"stop"|"reboot"}
 //                     {"path":"msp","cmd":<u8>}
+//                     {"path":"ota","action":"begin","size":<u32, optional -- see note>}
+//                     {"path":"ota","action":"chunk","data":"<base64, <= OTA_CHUNK_MAX_BYTES raw>"}
+//                     {"path":"ota","action":"end"}     -- reboots into the new firmware on success
+//                     {"path":"ota","action":"abort"}
 //   Device -> host:   one JSON line per response, on the same port the
 //                     request arrived on, e.g. {"ok":true} or the full
 //                     status object. DBG() debug lines are ALSO still
@@ -62,6 +66,8 @@
 #include "msp_protocol.h"
 #include "fc_status.h"
 #include "web_server.h"   // webInit()
+#include <Update.h>
+#include "mbedtls/base64.h"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Line buffering — one assembler per port, since a byte from one port must
@@ -159,6 +165,104 @@ static void handleMsp(Print &out, const String &line, bool viaFcUart) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// OTA firmware update
+// ──────────────────────────────────────────────────────────────────────────────
+// Same Update.h flow web_server.cpp's HTTP /api/ota uses, exposed on this
+// line protocol so it also works over the FC-UART/Betaflight-passthrough
+// channel -- flash the C3 without unplugging it from the quad. Works
+// identically over either port; unlike MSP passthrough there's no reason to
+// refuse it on the FC-UART channel, since that's the whole point.
+//
+// This protocol is JSON/text with a 512-byte line buffer (LineAssembler),
+// not a raw-binary transport, so firmware bytes travel base64-encoded in
+// OTA_CHUNK_MAX_BYTES-sized pieces (see config.h) -- the browser drives
+// begin -> chunk (repeated) -> end, one in flight at a time like every
+// other command here.
+//
+// NOTE on "begin"'s optional "size": passing a known size makes
+// Update.begin() erase the WHOLE required flash region in one upfront
+// blocking call, which for anything but a small image can stall the main
+// loop for several seconds -- long enough to blow both the caller's own
+// reply timeout and FC_UART_BENCH_IDLE_MS below, letting mspPollRC()/
+// fcStatusUpdate() slip an MSP request onto Serial1 mid-transfer and
+// corrupt the line framing (confirmed on real hardware with a ~1.2MB
+// image). docs/app.js deliberately omits "size" for this reason, which
+// falls back to UPDATE_SIZE_UNKNOWN and erases incrementally per chunk
+// instead -- same as the existing Wi-Fi /api/ota upload already does.
+// _otaActive additionally holds serialConfigFcUartActive() true for the
+// whole transfer regardless (see below), as defense in depth against
+// any one step still taking longer than expected.
+// ──────────────────────────────────────────────────────────────────────────────
+
+static bool   _otaActive  = false;
+static size_t _otaWritten = 0;
+
+static void handleOta(Print &out, const String &line) {
+    String action = jsonGetStr(line, "action");
+
+    if (action == "begin") {
+        long size = jsonGetNum(line, "size", -1);
+        if (!Update.begin(size > 0 ? (size_t)size : UPDATE_SIZE_UNKNOWN)) {
+            sendErr(out, Update.errorString());
+            return;
+        }
+        _otaActive  = true;
+        _otaWritten = 0;
+        DBG("OTA: begin (size=%ld)", size);
+        sendOk(out);
+
+    } else if (action == "chunk") {
+        if (!_otaActive) { sendErr(out, "no OTA in progress -- send begin first"); return; }
+
+        String data = jsonGetStr(line, "data");
+        static uint8_t raw[OTA_CHUNK_MAX_BYTES];
+        size_t outLen = 0;
+        int rc = mbedtls_base64_decode(raw, sizeof(raw), &outLen,
+                                        (const unsigned char *)data.c_str(), data.length());
+        if (rc != 0) {
+            sendErr(out, "bad base64 chunk");
+            _otaActive = false;
+            Update.abort();
+            return;
+        }
+
+        if (Update.write(raw, outLen) != outLen) {
+            sendErr(out, Update.errorString());
+            _otaActive = false;
+            Update.abort();
+            return;
+        }
+        _otaWritten += outLen;
+        sendOkExtra(out, ("\"written\":" + String(_otaWritten)).c_str());
+
+    } else if (action == "end") {
+        if (!_otaActive) { sendErr(out, "no OTA in progress"); return; }
+        // Keep _otaActive true through Update.end() itself -- it does a
+        // final verification pass over the whole image and can take a
+        // moment, and serialConfigFcUartActive() below leans on this flag
+        // to keep MSP polling off Serial1 for the *entire* OTA, not just
+        // between begin/chunk.
+        bool ok = Update.end(true);
+        _otaActive = false;
+        if (ok) {
+            DBG("OTA: success, %u bytes -- rebooting", (unsigned)_otaWritten);
+            sendOk(out);
+            delay(400);
+            ESP.restart();
+        } else {
+            sendErr(out, Update.errorString());
+        }
+
+    } else if (action == "abort") {
+        if (_otaActive) { Update.abort(); _otaActive = false; }
+        sendOk(out);
+
+    } else {
+        sendErr(out, "unknown ota action");
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Dispatch one complete command line
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -217,6 +321,9 @@ static void dispatchLine(Print &out, const String &line, bool viaFcUart) {
     } else if (path == "msp") {
         handleMsp(out, line, viaFcUart);
 
+    } else if (path == "ota") {
+        handleOta(out, line);
+
     } else {
         sendErr(out, "unknown path");
     }
@@ -270,5 +377,16 @@ void serialConfigFeedFcUartByte(uint8_t b) {
 }
 
 bool serialConfigFcUartActive() {
+    // An in-progress OTA (over EITHER transport) always counts as active,
+    // regardless of the idle timer: Update.begin()/write()/end() can each
+    // block the main loop for a while (flash erase/program/verify), long
+    // enough on their own to blow FC_UART_BENCH_IDLE_MS between two
+    // otherwise-prompt chunk commands -- exactly the gap mspPollRC() and
+    // fcStatusUpdate() need to slip an MSP request onto Serial1 and
+    // corrupt whatever bench reply is in flight. An OTA has no business
+    // sharing the wire with FC polling either way, so just hold this true
+    // for its whole duration rather than trying to out-guess how long any
+    // one step takes.
+    if (_otaActive) return true;
     return _lastFcUartCmdMs != 0 && (millis() - _lastFcUartCmdMs) < FC_UART_BENCH_IDLE_MS;
 }

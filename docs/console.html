@@ -171,6 +171,38 @@
     <h2>OSD custom messages</h2>
     <div id="osdSlots" class="osd-slots"></div>
     <button id="btnSaveOsd" class="btn">Save OSD slots</button>
+    <p class="hint">
+      Live preview renders each message through the real Betaflight OSD font,
+      not just plain text. Notice lowercase letters look wrong (or turn into
+      little icons) &mdash; that's a real font limitation, not a bug in this
+      page, which is why ShutterLink's own duration text (e.g. "2H33M") is
+      uppercase-only.
+    </p>
+  </section>
+
+  <!-- OTA firmware update -->
+  <section class="card">
+    <h2>Firmware update</h2>
+    <label>New firmware (.bin)
+      <input type="file" id="otaFile" accept=".bin">
+    </label>
+    <div class="row">
+      <button id="btnOtaFlash" class="btn danger" disabled>Flash firmware</button>
+      <button id="btnOtaCancel" class="btn small" hidden>Cancel</button>
+    </div>
+    <div class="ota-progress" id="otaProgressWrap">
+      <div class="ota-progress-bar" id="otaProgressBar"></div>
+    </div>
+    <p class="ota-status" id="otaStatus"></p>
+    <p class="hint">
+      Works over either connection above, including a live Betaflight passthrough session &mdash;
+      no need to unplug the board from the quad to update it. Writes to the C3's spare OTA
+      partition and only switches over once the transfer verifies clean, so a failed or
+      cancelled flash leaves the currently-running firmware untouched. Build a <code>firmware.bin</code>
+      with <code>pio run</code> (see the <a href="setup.html">Setup Guide</a>); this bench-only
+      path assumes the board is disarmed and not flying. Don't disconnect or power off the
+      board while a flash is in progress.
+    </p>
   </section>
 
   <!-- Wi-Fi -->
