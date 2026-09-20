@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web UI Guide — ShutterLink</title>
+<meta name="description" content="A tab-by-tab tour of the ShutterLink field Web UI: dashboard, controls, camera pairing, OSD slots, flight-controller status and OTA firmware updates.">
+<script>(function(){try{var t=localStorage.getItem('shutterlink.theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<symbol id="i-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5 L15.8 9.8 M20.9 9.4 L13.4 10.9 M17.8 19.4 L12.9 13.1 M6.4 19 L10.6 12.9 M3.2 10.2 L10.5 11.4 M8 4.9 L11.4 11" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".85"/><circle cx="12" cy="12" r="3.1" fill="currentColor" opacity=".22"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4" fill="currentColor" opacity=".3"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="currentColor" stroke-width="1.7"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></g></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.2 13.9 A8.4 8.4 0 1 1 10 3.7 A6.8 6.8 0 0 0 20.2 13.9 Z" fill="currentColor" opacity=".28"/><path d="M20.2 13.9 A8.4 8.4 0 1 1 10 3.7 A6.8 6.8 0 0 0 20.2 13.9 Z" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></g></symbol>
+<symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.5 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.05 1.53 1.05.89 1.57 2.34 1.12 2.91.85.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.75-.1-.26-.45-1.32.1-2.75 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 2.5-.35c.85 0 1.71.12 2.5.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.43.2 2.49.1 2.75.64.71 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .28.18.61.69.5A10.26 10.26 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></g><circle cx="9" cy="7" r="2.5" fill="currentColor" opacity=".35"/><circle cx="9" cy="7" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="15" cy="12" r="2.5" fill="currentColor" opacity=".35"/><circle cx="15" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7" cy="17" r="2.5" fill="currentColor" opacity=".35"/><circle cx="7" cy="17" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+<symbol id="i-cam" viewBox="0 0 24 24"><rect x="2.8" y="6.4" width="18.4" height="12.4" rx="3.2" fill="currentColor" opacity=".16"/><rect x="2.8" y="6.4" width="18.4" height="12.4" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 6.2 L9.6 3.8 h4.8 l1.4 2.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.6" r="3.4" fill="currentColor" opacity=".35"/><circle cx="12" cy="12.6" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.4 L21 8.2 L12 13 L3 8.2 Z" fill="currentColor" opacity=".25"/><path d="M12 3.4 L21 8.2 L12 13 L3 8.2 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3.4 12.4 L12 17 L20.6 12.4 M3.4 16.6 L12 21.2 L20.6 16.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.2" fill="currentColor" opacity=".16"/><rect x="6" y="6" width="12" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="9.6" y="9.6" width="4.8" height="4.8" rx="1" fill="currentColor" opacity=".5"/><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 2.8v3.2M15 2.8v3.2M9 18v3.2M15 18v3.2M2.8 9h3.2M2.8 15h3.2M18 9h3.2M18 15h3.2"/></g></symbol>
+<symbol id="i-bt" viewBox="0 0 24 24"><path d="M6.5 7.5 L17 16.5 L11.8 21 V3 L17 7.5 L6.5 16.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</defs>
+</svg>
+
+<header class="site-header glass">
+  <a href="index.html" class="brand">
+    <svg><use href="#i-aperture"/></svg>
+    <span class="name">ShutterLink<span class="sub">Betaflight Cam Control</span></span>
+  </a>
+  <button class="iconbtn" id="navToggle" aria-label="Toggle menu"><svg><use href="#i-menu"/></svg></button>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="setup.html">Setup Guide</a>
+    <a href="webui.html">Web UI Guide</a>
+    <a href="console.html">Bench Console</a>
+    <a href="reference.html">Reference</a>
+  </nav>
+  <div class="header-actions">
+    <button class="iconbtn" id="themeBtn" title="Toggle theme"><svg id="themeIco"><use href="#i-moon"/></svg></button>
+    <a class="iconbtn" href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener" title="View on GitHub"><svg><use href="#i-github"/></svg></a>
+  </div>
+</header>
+
+<main class="page">
+  <section class="section" style="margin-top:12px">
+    <h1>Web UI Guide</h1>
+    <p class="lead">Connect a phone or PC to the ShutterLink Wi-Fi network — the captive portal opens
+      automatically on most devices, otherwise browse to <code>http://192.168.4.1</code>. Five tabs along
+      the top.</p>
+  </section>
+
+  <section class="section">
+    <div class="table-wrap">
+      <table>
+        <tr><th>Tab</th><th>What you can do</th></tr>
+        <tr><td><strong>Dashboard</strong></td><td>Live link/camera/FC status, big START / STOP buttons, live preview of the four OSD strings, camera battery, record-switch value, FC battery &amp; arm state, heap/uptime.</td></tr>
+        <tr><td><strong>Controls</strong></td><td>Record switch channel (CH5–16/AUX), ON threshold, debounce, record-on-arm + stop-on-disarm toggles, Wi-Fi AP credentials, Wi-Fi radio switch channel.</td></tr>
+        <tr><td><strong>Camera</strong></td><td>Active connection status, saved-camera registry (select/remove, up to 4), discovery scan with Pair &amp; Save, "show all nearby devices" fallback.</td></tr>
+        <tr><td><strong>OSD</strong></td><td>Assign content to Custom Message slots 1–4 with live previews.</td></tr>
+        <tr><td><strong>FC / System</strong></td><td>Betaflight identity (API/firmware/board), battery, arm state, read-only MSP console (passthrough to your FC), free heap/uptime/firmware version, reboot, OTA firmware update.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Pairing in detail — the Camera tab</h2>
+    <p>The Camera tab has three cards:</p>
+    <div class="grid cols-2">
+      <div class="glass feature">
+        <svg class="ic"><use href="#i-bt"/></svg>
+        <h3>Active connection</h3>
+        <p>Which camera is connected right now, its model, battery and link state.</p>
+      </div>
+      <div class="glass feature">
+        <svg class="ic"><use href="#i-cam"/></svg>
+        <h3>Saved cameras</h3>
+        <p>Your NVS registry (max 4). Tap an entry to make it active and connect immediately; remove
+          entries you no longer own.</p>
+      </div>
+    </div>
+    <h3>Discover new camera — the pairing workflow</h3>
+    <ul>
+      <li>Press <strong>Scan for Cameras</strong> (5-second one-shot window, results sorted by signal
+        strength, type auto-detected).</li>
+      <li>Tap <strong>Pair &amp; Save</strong> on your device. The ESP32 saves it to flash, selects it and
+        connects immediately.</li>
+      <li>Nothing ever auto-connects except the <em>saved, active</em> camera — a camera that merely
+        appears in a scan is never persisted.</li>
+      <li>If your camera doesn't match the auto-detection filters, use the <strong>Show all nearby
+        devices</strong> link and identify it by RSSI.</li>
+    </ul>
+    <p>First-connection approvals happen on the <strong>camera's own screen</strong> (one tap for GoPro,
+      sometimes one for DJI) — after that, reconnection is silent.</p>
+    <p>The UI is a single-page app embedded in the firmware (PROGMEM, ~33&nbsp;KB): frosted glass cards,
+      backdrop blur, animated gradient background, smooth transitions, and a dark/light mode toggle that
+      persists in your browser — the same look this site borrows.</p>
+  </section>
+
+  <section class="section">
+    <h2>Can it configure Betaflight from the Web UI?</h2>
+    <p>A full Configurator port isn't realistic on an ESP32-C3 (the real Configurator is a
+      multi-megabyte desktop-class app and needs a serial/WebSocket bridge). But the firmware already
+      speaks MSP in both directions over the FC UART, so a lightweight config panel — reading/writing
+      selected settings via MSP passthrough (think "Betaflight Lua scripts in a browser") — is absolutely
+      feasible as a future subtab. The FC/System tab's MSP console already demonstrates live MSP data
+      flowing from your FC (read-only allowlist today).</p>
+  </section>
+
+  <section class="section">
+    <h2>Updating firmware over Wi-Fi (OTA)</h2>
+    <p><strong>FC / System tab → Firmware Update (OTA):</strong> upload a <code>.bin</code> from a GitHub
+      Release and the ESP32 flashes it and reboots automatically.</p>
+    <div class="notice err">
+      <svg><use href="#i-chip"/></svg>
+      <p>Don't close the page or power off mid-upload; if it fails, re-flash over USB (see the
+        <a href="setup.html#step-3">build &amp; flash step</a> of the setup guide).</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="notice ok">
+      <svg><use href="#i-sliders"/></svg>
+      <p>Prefer to configure ShutterLink without joining its Wi-Fi network — or need the unrestricted MSP
+        passthrough for debugging? Open the <a href="console.html">Web Serial Bench Console</a> instead;
+        it exposes the same settings surface over USB.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <span>ShutterLink · MIT licensed · Not affiliated with DJI, GoPro or itsFPV</span>
+  <div class="footer-links">
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV/releases" target="_blank" rel="noopener">Releases</a>
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV/issues" target="_blank" rel="noopener">Issues</a>
+    <a href="reference.html">Reference</a>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

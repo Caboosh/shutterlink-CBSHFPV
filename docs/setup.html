@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Setup Guide — ShutterLink</title>
+<meta name="description" content="Step-by-step: wire the ESP32-C3 to your flight controller, configure Betaflight, flash the firmware, connect the Web UI and pair your camera.">
+<script>(function(){try{var t=localStorage.getItem('shutterlink.theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<svg width="0" height="0" style="position:absolute">
+<defs>
+<symbol id="i-aperture" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.5 L15.8 9.8 M20.9 9.4 L13.4 10.9 M17.8 19.4 L12.9 13.1 M6.4 19 L10.6 12.9 M3.2 10.2 L10.5 11.4 M8 4.9 L11.4 11" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".85"/><circle cx="12" cy="12" r="3.1" fill="currentColor" opacity=".22"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4" fill="currentColor" opacity=".3"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="currentColor" stroke-width="1.7"/><g stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></g></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.2 13.9 A8.4 8.4 0 1 1 10 3.7 A6.8 6.8 0 0 0 20.2 13.9 Z" fill="currentColor" opacity=".28"/><path d="M20.2 13.9 A8.4 8.4 0 1 1 10 3.7 A6.8 6.8 0 0 0 20.2 13.9 Z" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></g></symbol>
+<symbol id="i-github" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.5 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.05 1.53 1.05.89 1.57 2.34 1.12 2.91.85.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.75-.1-.26-.45-1.32.1-2.75 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 2.5-.35c.85 0 1.71.12 2.5.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.43.2 2.49.1 2.75.64.71 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .28.18.61.69.5A10.26 10.26 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.4 L21 8.2 L12 13 L3 8.2 Z" fill="currentColor" opacity=".25"/><path d="M12 3.4 L21 8.2 L12 13 L3 8.2 Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M3.4 12.4 L12 17 L20.6 12.4 M3.4 16.6 L12 21.2 L20.6 16.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+<symbol id="i-usb" viewBox="0 0 24 24"><path d="M12 3v9m0 0-3 3m3-3 3 3M8 13a4 4 0 1 0 8 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="20" r="1.6" fill="currentColor"/></symbol>
+</defs>
+</svg>
+
+<header class="site-header glass">
+  <a href="index.html" class="brand">
+    <svg><use href="#i-aperture"/></svg>
+    <span class="name">ShutterLink<span class="sub">Betaflight Cam Control</span></span>
+  </a>
+  <button class="iconbtn" id="navToggle" aria-label="Toggle menu"><svg><use href="#i-menu"/></svg></button>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="setup.html">Setup Guide</a>
+    <a href="webui.html">Web UI Guide</a>
+    <a href="console.html">Bench Console</a>
+    <a href="reference.html">Reference</a>
+  </nav>
+  <div class="header-actions">
+    <button class="iconbtn" id="themeBtn" title="Toggle theme"><svg id="themeIco"><use href="#i-moon"/></svg></button>
+    <a class="iconbtn" href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener" title="View on GitHub"><svg><use href="#i-github"/></svg></a>
+  </div>
+</header>
+
+<main class="page">
+  <section class="section" style="margin-top:12px">
+    <h1>Setup Guide</h1>
+    <p class="lead">From bare ESP32-C3 to a camera that starts recording when you flip a switch. Seven
+      steps, no soldering surprises.</p>
+  </section>
+
+  <div class="with-toc">
+    <nav class="toc">
+      <a href="#hardware">Hardware</a>
+      <a href="#step-1">1. Wire it up</a>
+      <a href="#step-2">2. Configure Betaflight</a>
+      <a href="#step-3">3. Build &amp; flash</a>
+      <a href="#step-4">4. Connect the Web UI</a>
+      <a href="#step-5">5. Pair your camera</a>
+      <a href="#step-6">6. Configure the switch</a>
+      <a href="#step-7">7. Fine-tune</a>
+    </nav>
+
+    <div>
+      <section class="section" id="hardware" style="margin-top:0">
+        <h2>What you need</h2>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Item</th><th>Notes</th></tr>
+            <tr><td><strong>ESP32-C3</strong> board</td><td>DevKitM-1 / "Super Mini" class. BLE 5.0, NimBLE stack.</td></tr>
+            <tr><td><strong>Flight controller</strong></td><td>Betaflight with Custom Message OSD elements + one free UART.</td></tr>
+            <tr><td><strong>Camera</strong></td><td>DJI Osmo Action family <strong>or</strong> GoPro HERO8/9/10/11/12/13.</td></tr>
+            <tr><td>Wiring</td><td>4 wires: 5&nbsp;V, GND, FC TX, FC RX.</td></tr>
+          </table>
+        </div>
+        <div class="notice">
+          <svg><use href="#i-aperture"/></svg>
+          <p><strong>ESP32-C3 "Super Mini" / native-USB boards:</strong> these have no separate USB-UART
+            bridge chip — the chip's native USB peripheral is used directly. <code>platformio.ini</code>
+            must set <code>-D ARDUINO_USB_MODE=1</code> and <code>-D ARDUINO_USB_CDC_ON_BOOT=1</code> in
+            <code>build_flags</code> (already set in this repo), or Arduino's <code>Serial</code> object
+            binds to the disconnected UART0 peripheral instead of the native USB-CDC your monitor is
+            actually attached to. Symptom if this is ever missing: debug output still appears fine, but
+            anything you <em>type</em> into the monitor is silently lost — this affects both the plain
+            debug console and the <a href="console.html">Web Serial bench console</a>.</p>
+        </div>
+      </section>
+
+      <section class="section" id="step-1">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="body">
+            <h3>Wire the ESP32 to the flight controller</h3>
+            <p>Four wires between the ESP32-C3 and a free UART on your FC:</p>
+            <div class="table-wrap">
+              <table>
+                <tr><th>ESP32-C3</th><th>Flight controller</th><th>Notes</th></tr>
+                <tr><td><strong>GPIO5</strong> (RX)</td><td>UART <strong>TX</strong></td><td>FC transmits → ESP32 receives</td></tr>
+                <tr><td><strong>GPIO4</strong> (TX)</td><td>UART <strong>RX</strong></td><td>ESP32 transmits → FC receives</td></tr>
+                <tr><td><strong>5 V</strong></td><td>5 V</td><td>Or power the ESP32 from its own USB while bench-testing</td></tr>
+                <tr><td><strong>GND</strong></td><td>GND</td><td>Common ground is mandatory</td></tr>
+              </table>
+            </div>
+            <p>TX goes to RX on both ends — it's a crossover, not pin-to-pin. Double-check 5&nbsp;V
+              tolerance: most ESP32-C3 dev boards accept 5&nbsp;V on the VIN/5V pin only.</p>
+            <h3>Status LED (GPIO8 on most C3 boards)</h3>
+            <div class="table-wrap">
+              <table>
+                <tr><th>Pattern</th><th>Meaning</th></tr>
+                <tr><td>Slow blink (1&nbsp;s)</td><td>Disconnected / scanning</td></tr>
+                <tr><td>Fast blink (200&nbsp;ms)</td><td>Connecting / authenticating</td></tr>
+                <tr><td>Solid</td><td>Connected, camera standby</td></tr>
+                <tr><td>Medium blink (500&nbsp;ms)</td><td>Recording desired</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-2">
+        <div class="step">
+          <div class="num">2</div>
+          <div class="body">
+            <h3>Configure Betaflight</h3>
+            <ol>
+              <li><strong>Ports tab:</strong> enable <strong>MSP</strong> on the UART wired to the ESP32
+                (115200 baud, leave everything else off for that port).</li>
+              <li><strong>OSD tab:</strong> place <strong>Custom Message 1–4</strong> elements wherever you
+                want them on screen — position comes from Betaflight, <em>content</em> is pushed live by
+                ShutterLink.</li>
+              <li>Assign an AUX channel (on your radio's mixes tab) as your record switch if you want
+                switch control. You don't need to create a Betaflight <em>mode</em> for it — ShutterLink
+                reads the raw RC channels.</li>
+            </ol>
+            <div class="notice">
+              <svg><use href="#i-layers"/></svg>
+              <p>Your Betaflight build must support <strong>Custom Message OSD elements</strong>
+                (<code>MSP2_SET_TEXT</code>). Stock 4.x / 4.5 does not.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-3">
+        <div class="step">
+          <div class="num">3</div>
+          <div class="body">
+            <h3>Build &amp; flash the firmware</h3>
+<pre><code># 1. Clone
+git clone https://github.com/Caboosh/shutterlink-CBSHFPV.git
+cd shutterlink
+
+# 2. Build
+pio run
+
+# 3. Flash (hold BOOT on some C3 boards if upload doesn't start)
+pio run -t upload
+
+# 4. Watch it work
+pio device monitor -b 115200</code></pre>
+            <p>Dependencies (handled by PlatformIO): <code>h2zero/NimBLE-Arduino @ ^1.4.1</code>. Partition
+              table switched to <code>min_spiffs.csv</code> (BLE + Wi-Fi + web UI need the bigger app
+              slot). The native-USB build flags from the hardware note above are required on "Super Mini"
+              class boards.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-4">
+        <div class="step">
+          <div class="num">4</div>
+          <div class="body">
+            <h3>Connect to the Web UI</h3>
+            <ol>
+              <li>Power the ESP32 (FC 5&nbsp;V or USB).</li>
+              <li>On your phone or PC, join the Wi-Fi network <strong>ShutterLink</strong> (password:
+                <strong>shutterlink</strong>).</li>
+              <li>The captive portal opens automatically on most devices; otherwise browse to
+                <strong>http://192.168.4.1</strong>.</li>
+              <li>You land on the <strong>Dashboard</strong> with live status cards.</li>
+            </ol>
+            <p>See the <a href="webui.html">Web UI Guide</a> for a full tab-by-tab tour.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-5">
+        <div class="step">
+          <div class="num">5</div>
+          <div class="body">
+            <h3>Pair your camera</h3>
+            <ol>
+              <li>Power the camera on and put it within a few metres of the ESP32.</li>
+              <li>In the Web UI open the <strong>Camera</strong> tab.</li>
+              <li>Tap <strong>Scan for Cameras</strong> — a one-shot 5-second BLE scan runs and lists
+                nearby cameras (brand auto-detected; strongest signal first).
+                <br><span class="muted">Camera not in the list? Tap "Camera not listed? Show all nearby
+                devices" and pick yours by signal strength (hold it within 1&nbsp;m — the strongest RSSI
+                is usually yours).</span></li>
+              <li>Tap <strong>Pair &amp; Save</strong> on your camera. This is the only moment anything is
+                written to flash — devices the radio merely <em>sees</em> are never persisted.</li>
+              <li>Watch the camera screen:
+                <ul>
+                  <li><strong>GoPro:</strong> the first ever connection asks for a one-time approval tap on
+                    the camera's own screen. After that, reconnection is silent.</li>
+                  <li><strong>DJI:</strong> an approve prompt may appear once — tap approve.</li>
+                </ul>
+              </li>
+              <li>The LED goes solid and the Dashboard shows the camera model + battery. From now on the
+                ESP32 reconnects to this camera automatically, no scan needed.</li>
+            </ol>
+            <p>Up to <strong>4 cameras</strong> can be saved; switch the active one (or remove entries)
+              from the Saved cameras card in the same tab.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-6">
+        <div class="step">
+          <div class="num">6</div>
+          <div class="body">
+            <h3>Configure the record switch</h3>
+            <ol>
+              <li>Open the <strong>Controls</strong> tab.</li>
+              <li>Pick your <strong>switch channel</strong> (CH5–16 / AUX1–12), the <strong>ON
+                threshold</strong> (default 1500&nbsp;µs) and <strong>debounce</strong> (default
+                300&nbsp;ms) — hit <strong>Save switch settings</strong>.</li>
+              <li>Optional: enable <strong>Record on arm</strong> (+ <strong>Stop on disarm</strong>) so
+                recording follows the arming state instead of a switch.</li>
+              <li>Flip the switch and watch the Dashboard: the record-switch card should flip from IDLE to
+                ON, and the camera starts/stops recording.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="step-7">
+        <div class="step">
+          <div class="num">7</div>
+          <div class="body">
+            <h3>Fine-tune OSD &amp; Wi-Fi (optional)</h3>
+            <ul>
+              <li><strong>OSD tab:</strong> assign content (cam status / rec time / battery / link / FC
+                battery / arm state / off) to Custom Messages 1–4 with live previews.</li>
+              <li><strong>Controls tab:</strong> change the Wi-Fi SSID/password, or assign a spare AUX
+                channel as a <strong>Wi-Fi radio switch</strong> — flip it low in flight and the hotspot
+                powers down to save ~60–100&nbsp;mA (BLE camera control keeps running; the AP always boots
+                ON so you can't lock yourself out).</li>
+            </ul>
+            <p class="lead" style="margin-top:18px">Done — go fly. 🚁</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="notice ok">
+          <svg><use href="#i-usb"/></svg>
+          <p>Need to configure ShutterLink on the bench, without joining its Wi-Fi network? The
+            <a href="console.html">Web Serial Bench Console</a> talks to the board directly over USB, or
+            through a Betaflight serial passthrough once it's mounted in the quad. Full protocol details
+            are in the <a href="reference.html">Reference</a> page.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <span>ShutterLink · MIT licensed · Not affiliated with DJI, GoPro or itsFPV</span>
+  <div class="footer-links">
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV/releases" target="_blank" rel="noopener">Releases</a>
+    <a href="https://github.com/Caboosh/shutterlink-CBSHFPV/issues" target="_blank" rel="noopener">Issues</a>
+    <a href="reference.html">Reference</a>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

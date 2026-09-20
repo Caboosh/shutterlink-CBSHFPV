@@ -10,12 +10,18 @@
 //   • Serial  (USB-CDC, 115200 baud) — the same port used for DBG() logging
 //     and flashing. Plug a USB cable straight into the C3.
 //   • Serial1 (the FC UART, 115200 baud) — reachable via a Betaflight
-//     serial passthrough session targeting that UART. No direct USB access
-//     to the C3 needed: put the FC's port into passthrough (Betaflight CLI
-//     `serial_passthrough <uart-id> 115200`, or the Configurator's Ports
-//     tab), then point the Web Serial console at the FC's own COM port
-//     instead of the C3's. Betaflight stops running while passthrough is
-//     active, so this is strictly a bench-only path — never in the air.
+//     serial passthrough session targeting that UART (CLI: `serial` to
+//     check the argument style this firmware wants, then `serialpassthrough
+//     <target> <baud>` — see docs/app.js/README.md, the syntax changed in
+//     Betaflight 25.12). No direct USB access to the C3 needed: the bench
+//     console drives this itself, then points its Web Serial connection at
+//     the FC's own COM port instead of the C3's. Betaflight stops running
+//     while passthrough is active, so this is strictly a bench-only path —
+//     never in the air. While a bench session is active on this channel,
+//     main.cpp pauses its own periodic MSP polling (mspPollRC(),
+//     fcStatusUpdate() — see serialConfigFcUartActive()) so those requests
+//     don't leak out through the passthrough bridge and corrupt the JSON
+//     line framing on the browser's end.
 //
 // Wire format — one JSON object per line, both directions, identical on
 // both ports:
@@ -70,6 +76,10 @@ struct LineAssembler {
 static LineAssembler _usbLine;   // Serial  — direct USB-CDC bench cable
 static LineAssembler _fcLine;    // Serial1 — FC UART, reachable via Betaflight
                                   //           serial passthrough
+
+// Last time a bench command actually arrived over Serial1 — see
+// serialConfigFcUartActive() / FC_UART_BENCH_IDLE_MS.
+static uint32_t _lastFcUartCmdMs = 0;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Response helpers — transport-aware: reply on whichever port the request
@@ -223,6 +233,7 @@ static void feedByte(LineAssembler &la, Print &out, bool viaFcUart, char c) {
             String line(la.buf);
             line.trim();
             if (line.length() > 0 && line.charAt(0) == '{') {
+                if (viaFcUart) _lastFcUartCmdMs = millis();
                 dispatchLine(out, line, viaFcUart);
             }
         }
@@ -245,6 +256,7 @@ static void feedByte(LineAssembler &la, Print &out, bool viaFcUart, char c) {
 void serialConfigInit() {
     _usbLine.len = 0;
     _fcLine.len = 0;
+    _lastFcUartCmdMs = 0;
 }
 
 void serialConfigUpdate() {
@@ -255,4 +267,8 @@ void serialConfigUpdate() {
 
 void serialConfigFeedFcUartByte(uint8_t b) {
     feedByte(_fcLine, Serial1, true, (char)b);
+}
+
+bool serialConfigFcUartActive() {
+    return _lastFcUartCmdMs != 0 && (millis() - _lastFcUartCmdMs) < FC_UART_BENCH_IDLE_MS;
 }

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bench Console — ShutterLink</title>
+<meta name="description" content="Configure and debug your ShutterLink ESP32-C3 directly over USB using the browser's Web Serial API — no Wi-Fi network required.">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* Slim site-navigation strip above the console's own header — reuses the
+     console's existing dark palette (defined in style.css) so it never
+     clashes with the tool's own colors. */
+  .site-topbar{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:10px 20px; background:var(--panel); border-bottom:1px solid var(--panel-border);
+    font-size:13px;
+  }
+  .site-topbar .brand{
+    display:flex; align-items:center; gap:8px; text-decoration:none; color:var(--text);
+    font-weight:700; font-size:14px; flex-shrink:0;
+  }
+  .site-topbar nav{display:flex; gap:4px; flex-wrap:wrap}
+  .site-topbar nav a{
+    color:var(--muted); text-decoration:none; padding:6px 10px; border-radius:7px; transition:filter .15s;
+  }
+  .site-topbar nav a:hover{ color:var(--text); background:var(--panel-border); }
+  .site-topbar nav a.active{ color:var(--text); background:var(--panel-border); }
+  .site-topbar .gh{ margin-left:auto; color:var(--muted); text-decoration:none; flex-shrink:0; }
+  .site-topbar .gh:hover{ color:var(--text); }
+  .console-intro{
+    margin:14px 20px 0; padding:12px 14px; background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:var(--radius); font-size:12.5px; color:var(--muted); line-height:1.6;
+  }
+  .console-intro a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="site-topbar">
+  <a class="brand" href="index.html">ShutterLink</a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="setup.html">Setup Guide</a>
+    <a href="webui.html">Web UI Guide</a>
+    <a href="console.html" class="active">Bench Console</a>
+    <a href="reference.html">Reference</a>
+  </nav>
+  <a class="gh" href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener">GitHub ↗</a>
+</div>
+
+<p class="console-intro">
+  This talks straight to your ShutterLink board over USB using the browser's
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a> —
+  no Wi-Fi network required. New here? See the <a href="setup.html">Setup Guide</a> for wiring &amp;
+  flashing, or the <a href="reference.html#web-serial-protocol">Reference</a> page for the wire protocol
+  and Betaflight-passthrough mechanics.
+</p>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="connDot"></span>
+    <h1>ShutterLink <span class="muted">Bench Console</span></h1>
+  </div>
+  <div class="conn-controls">
+    <span id="connLabel" class="muted">Not connected</span>
+    <button id="btnConnect" class="btn primary">Connect over USB</button>
+    <button id="btnDisconnect" class="btn" hidden>Disconnect</button>
+  </div>
+</header>
+
+<details class="passthrough-panel" id="passthroughPanel">
+  <summary>C3 not reachable over USB? Connect via Betaflight passthrough instead</summary>
+  <div class="row">
+    <label>FC UART # (Ports tab, wired to the C3)
+      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
+    </label>
+    <label>Baud
+      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
+    </label>
+    <button id="btnConnectPassthrough" class="btn">Connect via FC passthrough</button>
+  </div>
+  <p class="hint">
+    Opens the FC's own USB port, drives its CLI the way Betaflight Configurator's CLI tab does
+    (<code>#</code>, then <code>serial</code> to check which argument style this firmware wants,
+    then <code>serialpassthrough</code>), then talks to the C3 straight over that same connection —
+    no Configurator window, no reconnecting to a different port. The FC stops flying the instant
+    passthrough starts and needs a power cycle afterwards to fly again, so this is a
+    bench/disarmed-only connection method, same as the direct USB one.
+  </p>
+</details>
+
+<p class="unsupported" id="unsupportedNotice" hidden>
+  Your browser doesn't support the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>.
+  Use a recent Chrome, Edge, or Opera desktop build. Also note Web Serial requires a secure context —
+  this page must be served over <code>https://</code> (GitHub Pages is fine) or <code>http://localhost</code>,
+  never opened directly as a <code>file://</code> URL.
+</p>
+
+<main id="app" class="grid" aria-disabled="true">
+
+  <!-- Status -->
+  <section class="card">
+    <h2>Status</h2>
+    <div class="status-grid">
+      <div class="stat"><span class="label">Link</span><span class="value" id="stCamState">—</span></div>
+      <div class="stat"><span class="label">Camera</span><span class="value" id="stCamName">—</span></div>
+      <div class="stat"><span class="label">Battery</span><span class="value" id="stCamBatt">—</span></div>
+      <div class="stat"><span class="label">Rec time</span><span class="value" id="stRecTime">—</span></div>
+      <div class="stat"><span class="label">Recording</span><span class="value" id="stDesired">—</span></div>
+      <div class="stat"><span class="label">RC switch</span><span class="value" id="stRcValue">—</span></div>
+      <div class="stat"><span class="label">FC</span><span class="value" id="stFc">—</span></div>
+      <div class="stat"><span class="label">Wi-Fi AP</span><span class="value" id="stWifi">—</span></div>
+      <div class="stat"><span class="label">Heap</span><span class="value" id="stHeap">—</span></div>
+      <div class="stat"><span class="label">Uptime</span><span class="value" id="stUptime">—</span></div>
+      <div class="stat"><span class="label">Firmware</span><span class="value" id="stVersion">—</span></div>
+      <div class="stat error-stat"><span class="label">Last error</span><span class="value" id="stLastError">—</span></div>
+    </div>
+    <div class="row">
+      <button id="btnStart" class="btn">Start recording</button>
+      <button id="btnStop" class="btn">Stop recording</button>
+      <button id="btnReboot" class="btn danger">Reboot device</button>
+    </div>
+  </section>
+
+  <!-- Camera -->
+  <section class="card">
+    <h2>Camera</h2>
+    <label>Backend
+      <select id="camType">
+        <option value="0">DJI Osmo</option>
+        <option value="1">GoPro</option>
+      </select>
+    </label>
+    <button id="btnApplyCamType" class="btn small">Apply backend</button>
+
+    <h3>Saved cameras</h3>
+    <ul id="savedCamList" class="list">
+      <li class="muted">No data yet</li>
+    </ul>
+
+    <h3>Discover</h3>
+    <div class="row">
+      <button id="btnScan" class="btn small">Scan for cameras</button>
+      <span id="scanStatus" class="muted"></span>
+    </div>
+    <ul id="pendingCamList" class="list">
+      <li class="muted">No scan results yet</li>
+    </ul>
+  </section>
+
+  <!-- Record switch -->
+  <section class="card">
+    <h2>Record switch</h2>
+    <label>AUX channel index (0-15 = CH5-CH20)
+      <input type="number" id="auxChannel" min="0" max="15" step="1">
+    </label>
+    <label>ON threshold (us)
+      <input type="number" id="threshold" min="1200" max="1800" step="1">
+    </label>
+    <label>Debounce (ms)
+      <input type="number" id="debounce" min="50" max="1000" step="1">
+    </label>
+    <div class="row toggles">
+      <label class="switch-label"><input type="checkbox" id="recordOnArm"> Record on arm</label>
+      <label class="switch-label"><input type="checkbox" id="stopOnDisarm"> Stop on disarm</label>
+    </div>
+    <label>Stop-on-disarm delay (ms)
+      <input type="number" id="stopOnDisarmDelay" min="0" max="15000" step="50">
+    </label>
+    <button id="btnSaveSwitch" class="btn">Save switch settings</button>
+  </section>
+
+  <!-- OSD -->
+  <section class="card">
+    <h2>OSD custom messages</h2>
+    <div id="osdSlots" class="osd-slots"></div>
+    <button id="btnSaveOsd" class="btn">Save OSD slots</button>
+  </section>
+
+  <!-- Wi-Fi -->
+  <section class="card">
+    <h2>Wi-Fi AP</h2>
+    <label>SSID
+      <input type="text" id="apSsid" maxlength="32">
+    </label>
+    <label>Password (blank = open network, else 8-64 chars)
+      <input type="text" id="apPass" maxlength="64">
+    </label>
+    <label>Wi-Fi radio switch channel (-1 = disabled, 0-15 = CH5-CH20)
+      <input type="number" id="wifiSwitch" min="-1" max="15" step="1">
+    </label>
+    <label class="switch-label"><input type="checkbox" id="scanAll"> Show all nearby BLE devices when scanning</label>
+    <button id="btnSaveWifi" class="btn">Save Wi-Fi settings</button>
+    <p class="hint">Changing SSID/password restarts the AP — you'll need to reconnect the phone/PC Wi-Fi
+      that talks to the field Web UI. This USB console link is unaffected.</p>
+  </section>
+
+  <!-- MSP -->
+  <section class="card">
+    <h2>MSP passthrough</h2>
+    <p class="hint">Unrestricted over this USB link (unlike the Wi-Fi API's read-only allowlist).</p>
+    <div class="row">
+      <label>Command
+        <input type="number" id="mspCmd" min="0" max="255" step="1" placeholder="e.g. 101">
+      </label>
+      <button id="btnMsp" class="btn small">Send</button>
+    </div>
+    <pre id="mspResult" class="mono small-pre">—</pre>
+  </section>
+
+  <!-- Raw log -->
+  <section class="card wide">
+    <h2>Raw serial log</h2>
+    <div class="row">
+      <button id="btnClearLog" class="btn small">Clear</button>
+      <label class="switch-label"><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+    </div>
+    <pre id="rawLog" class="mono log"></pre>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
