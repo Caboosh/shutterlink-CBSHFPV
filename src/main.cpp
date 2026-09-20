@@ -219,15 +219,22 @@ void loop() {
 
     // While a Web Serial bench session is actively using Serial1 (i.e. a
     // Betaflight serial passthrough session bridges that UART to a
-    // browser instead of a live FC), skip our own outbound MSP polling.
-    // Those requests would otherwise go out over Serial1 exactly as
-    // always, get faithfully relayed by the passthrough bridge straight
-    // back to the browser, and corrupt its JSON line framing (raw MSP
-    // frames carry no '\n', so they glue onto the front of the next real
-    // JSON reply). There's no live FC to poll during passthrough anyway,
-    // so skipping costs nothing beyond the bench status view's "FC" field
-    // freezing at whatever it last read rather than promptly ticking over
-    // to "no link" — cosmetic, and expected during a bench-only session.
+    // browser instead of a live FC), skip everything that would otherwise
+    // write our own bytes out over Serial1 — MSP polling requests AND the
+    // OSD custom-message pushes below. Every one of those would go out
+    // over Serial1 exactly as always, get faithfully relayed by the
+    // passthrough bridge straight back to the browser, and corrupt its
+    // JSON line framing (raw MSP frames carry no '\n', so they glue onto
+    // the front of the next real JSON reply). There's no live FC to poll
+    // or send OSD text to during passthrough anyway, so skipping costs
+    // nothing beyond the bench status view's "FC" field freezing at
+    // whatever it last read, and OSD slot content not advancing (e.g. a
+    // live recording timer) until the bench session ends — cosmetic, and
+    // expected during a bench-only session. Without gating the OSD push
+    // too, starting a recording during a bench session reintroduces the
+    // exact same corruption: REC_TIME's text changes on almost every tick
+    // while recording, so osdSlotsUpdate() would otherwise write to
+    // Serial1 continuously the moment a recording starts.
     bool fcUartBenchActive = serialConfigFcUartActive();
 
     // 2. Send periodic MSP_RC requests to the Flight Controller.
@@ -243,7 +250,7 @@ void loop() {
     recorderUpdate();
 
     // 6. Push the four Custom Message OSD slots to the FC.
-    osdSlotsUpdate();
+    if (!fcUartBenchActive) osdSlotsUpdate();
 
     // 7. Serve the captive portal + REST API.
     camRegistryProcess();   // Flush cameras discovered by BLE scan callbacks

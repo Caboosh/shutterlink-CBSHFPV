@@ -33,10 +33,21 @@
 // How recently a Web Serial bench command must have arrived over Serial1
 // (the FC UART, i.e. a Betaflight serial passthrough session) for
 // serialConfigFcUartActive() to report the channel as an active bench
-// session rather than a live FC link. Generous relative to the bench
-// console's 1 Hz status poll so brief hiccups don't flap it, short enough
-// to resume normal FC polling promptly once the bench session ends.
-#define FC_UART_BENCH_IDLE_MS 3000
+// session rather than a live FC link.
+//
+// Must comfortably exceed the bench console's worst-case request cycle,
+// not just its steady-state poll interval: docs/app.js polls status every
+// 1000ms but gives each request up to a 4000ms timeout before giving up
+// (sendCommand()'s default timeoutMs), and requests are serialized, so a
+// single dropped/garbled reply can leave a ~4-5s gap between successfully
+// parsed lines. If this idle window were shorter than that gap (it used to
+// be 3000ms), the very first hiccup would let mspPollRC()/fcStatusUpdate()
+// resume, spray raw MSP bytes onto Serial1, corrupt the *next* reply too,
+// and repeat forever — a self-sustaining failure loop that looks like the
+// bench console never working, rather than one bad poll. 8000ms gives that
+// retry room to succeed cleanly while still resuming normal FC polling
+// reasonably promptly once a bench session actually ends.
+#define FC_UART_BENCH_IDLE_MS 8000
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Default User Settings (editable at runtime via Web UI / stored in NVS)
