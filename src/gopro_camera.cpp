@@ -33,6 +33,7 @@
 #include "cam_registry.h"
 #include "scan_results.h"
 #include "settings.h"
+#include "serial_config.h"
 #include <NimBLEDevice.h>
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -503,7 +504,16 @@ void gpUpdate() {
             // BLE_RECONNECT_INTERVAL_MS.  This saves the single 2.4 GHz
             // radio from having to time-share BLE scanning with the
             // SoftAP's Wi-Fi beaconing.
-            {
+            //
+            // Skip this attempt entirely while a Web Serial bench session is
+            // bridging the FC UART -- see the matching comment in
+            // dji_camera.cpp's djiUpdate() for why: connect() below blocks
+            // loop() for up to BLE_CONNECT_TIMEOUT_MS (10s) if the camera is
+            // off/out of range, which can starve a bench reply past its own
+            // timeout and, during passthrough, outlast FC_UART_BENCH_IDLE_MS
+            // and corrupt Serial1's JSON framing the same way an unguarded
+            // OTA write would.
+            if (!serialConfigFcUartActive()) {
                 char mac[18];
                 if (camRegistryActiveMac(CAMERA_GOPRO, mac, sizeof(mac)) &&
                     (now - _lastReconnectAttempt) >= BLE_RECONNECT_INTERVAL_MS) {

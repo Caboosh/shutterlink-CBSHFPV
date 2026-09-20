@@ -9,6 +9,7 @@
 #include "cam_registry.h"
 #include "scan_results.h"
 #include "settings.h"
+#include "serial_config.h"
 #include <NimBLEDevice.h>
 // ──────────────────────────────────────────────────────────────────────────────
 // DJI GATT UUIDs
@@ -647,7 +648,24 @@ void djiUpdate() {
             // BLE_RECONNECT_INTERVAL_MS.  This saves the single 2.4 GHz
             // radio from having to time-share BLE scanning with the
             // SoftAP's Wi-Fi beaconing.
-            {
+            //
+            // Skip this attempt entirely while a Web Serial bench session is
+            // bridging the FC UART (serialConfigFcUartActive()) -- connect()
+            // below is a BLOCKING NimBLE call (up to BLE_CONNECT_TIMEOUT_MS =
+            // 10s if the camera is off/out of range), and loop() has nothing
+            // else running meanwhile. That alone can starve a bench command's
+            // reply past its own timeout, and during an active passthrough
+            // session it can outlast FC_UART_BENCH_IDLE_MS too, letting
+            // mspPollRC()/fcStatusUpdate() resume mid-block and corrupt
+            // Serial1's JSON framing exactly like an unguarded OTA write
+            // would (see serial_config.cpp) -- confirmed on real hardware:
+            // testing OTA-over-passthrough with the paired camera powered
+            // off reproduced intermittent timeouts from this exact path.
+            // BLE_RECONNECT_INTERVAL_MS (5s) is shorter than the 10s connect
+            // timeout, so this fires repeatedly for as long as the camera
+            // stays unreachable -- skipping it here just means the bench
+            // console won't fight a background reconnect loop for the wire.
+            if (!serialConfigFcUartActive()) {
                 char mac[18];
                 if (camRegistryActiveMac(CAMERA_DJI, mac, sizeof(mac)) &&
                     (now - _lastReconnectAttempt) >= BLE_RECONNECT_INTERVAL_MS) {

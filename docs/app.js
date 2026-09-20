@@ -25,11 +25,70 @@ const OSD_SLOT_NAMES = [
   "Arm state",
 ];
 
+// ──────────────────────────────────────────────────────────────────────────
+// OSD live preview
+// ──────────────────────────────────────────────────────────────────────────
+// Renders each Custom Message string through the real Betaflight OSD
+// character set instead of plain text, so you can see how it'll actually
+// look on the goggles before flying -- including glyph quirks a plain-text
+// preview can't show, like the lowercase h/m/s bug documented in
+// osd_slots.cpp's formatHuman().
+//
+// Font: betaflight-configurator's resources/osd/2/betaflight.mcm (GPL-3.0,
+// https://github.com/betaflight/betaflight-configurator), decoded to a
+// 16x16 grid of 12x18px glyphs at assets/osd-font.png. Tile index == ASCII
+// code (tile 0x48 is 'H'), which is also how Betaflight itself indexes the
+// font when it draws a text OSD element -- so this preview uses the exact
+// same mapping real hardware does. NOTE: tiles 0x60-0x7F (the lowercase
+// ASCII range) are NOT letters in this font; they're repurposed for
+// heading/compass icons (0x60-0x6F) and unit/status icons (0x70-0x7F),
+// which is exactly why lowercase text renders wrong on real OSD hardware.
+const OSD_MAX_TEXT_LEN = 16; // matches OSD_MAX_TEXT_LEN in src/config.h
+const OSD_FONT_COLS = 16;
+const OSD_FONT_GLYPH_W = 12;
+const OSD_FONT_GLYPH_H = 18;
+const OSD_FONT_SCALE = 2;
+
+const osdFontImg = new Image();
+let osdFontReady = false;
+osdFontImg.onload = () => { osdFontReady = true; redrawOsdPreviews(); };
+osdFontImg.onerror = () => logLine("[console] couldn't load OSD preview font (assets/osd-font.png)", "err");
+osdFontImg.src = "assets/osd-font.png";
+
+/// Draw `text` into `canvas` using the OSD font, one glyph per fixed-width
+/// cell padded to OSD_MAX_TEXT_LEN characters (so every slot's preview is
+/// the same width, matching the Custom Message field's actual capacity).
+function drawOsdPreview(canvas, text) {
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!osdFontReady) return;
+  const glyphW = OSD_FONT_GLYPH_W * OSD_FONT_SCALE;
+  const str = String(text || "").slice(0, OSD_MAX_TEXT_LEN);
+  for (let i = 0; i < OSD_MAX_TEXT_LEN; i++) {
+    const code = i < str.length ? str.charCodeAt(i) & 0xff : 0x20; // pad with spaces
+    const col = code % OSD_FONT_COLS;
+    const row = Math.floor(code / OSD_FONT_COLS);
+    ctx.drawImage(
+      osdFontImg,
+      col * OSD_FONT_GLYPH_W, row * OSD_FONT_GLYPH_H, OSD_FONT_GLYPH_W, OSD_FONT_GLYPH_H,
+      i * glyphW, 0, glyphW, canvas.height
+    );
+  }
+}
+
+/// Re-render every OSD preview canvas from its current data-text (used once
+/// the font image finishes loading, in case slots were already populated).
+function redrawOsdPreviews() {
+  document.querySelectorAll("canvas.osd-preview").forEach((c) => drawOsdPreview(c, c.dataset.text || ""));
+}
+
 let port = null;
 let reader = null;
 let writer = null;
 let readLoopPromise = null;
 let connected = false;
+let connVia = null; // "usb" | "fc-uart" -- which path finishConnect() came in on
 
 // Serialized command queue — the protocol expects one request in flight at
 // a time, so every sendCommand() call is chained onto the previous one.
@@ -128,6 +187,7 @@ function ensureReadLoop() {
 /// Common tail once `port` is open and `writer` is grabbed, regardless of
 /// which path got us there (direct USB, or FC passthrough below).
 function finishConnect(via) {
+  connVia = via;
   setConnected(true, via);
   logLine(`[console] connected (${via === "fc-uart" ? "FC passthrough" : "direct USB"})`);
 
@@ -291,6 +351,7 @@ async function disconnect() {
 
 async function teardown() {
   setConnected(false);
+  connVia = null;
   try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch (_) {}
   try { if (writer) { writer.releaseLock(); } } catch (_) {}
   try { if (port) await port.close(); } catch (_) {}
@@ -518,14 +579,134 @@ function populateForms(st) {
       <label>Custom Message ${i + 1}
         <select data-slot="${i}">${opts}</select>
       </label>
-      <div class="preview">${escapeHtml(osdText[i] || "")}</div>`;
+      <canvas class="osd-preview" width="${OSD_MAX_TEXT_LEN * OSD_FONT_GLYPH_W * OSD_FONT_SCALE}" height="${OSD_FONT_GLYPH_H * OSD_FONT_SCALE}" data-text="${escapeHtml(osdText[i] || "")}" title="${escapeHtml(osdText[i] || "")}"></canvas>`;
     osdSlots.appendChild(wrap);
+    drawOsdPreview(wrap.querySelector("canvas.osd-preview"), osdText[i] || "");
   });
 
   $("apSsid").value = "";
   $("apPass").value = "";
   $("wifiSwitch").value = st.wifiSwitch ?? -1;
   $("scanAll").checked = !!st.scanAll;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// OTA firmware update
+// ──────────────────────────────────────────────────────────────────────────
+// Flashes new firmware over whichever serial link this console already has
+// open -- the direct USB-CDC cable, or a live Betaflight passthrough
+// session -- by driving the firmware's own "ota" line-protocol commands
+// (serial_config.cpp: begin/chunk/end/abort), which write into the C3's
+// inactive OTA partition via the same Update.h mechanism the Wi-Fi
+// /api/ota HTTP upload already uses. This is what makes it possible to
+// reflash the C3 through an FC-UART passthrough without ever unplugging it
+// from the quad -- the same idea ExpressLRS's own configurator uses to
+// reflash a receiver wired to an FC UART.
+//
+// The firmware's line buffer is a fixed 512 bytes (LineAssembler in
+// serial_config.cpp), so firmware bytes travel base64-encoded in
+// OTA_CHUNK_BYTES-sized pieces, one chunk per request/reply round trip via
+// the same serialized sendCommand() used for every other command here.
+// Keep OTA_CHUNK_BYTES in sync with OTA_CHUNK_MAX_BYTES in src/config.h.
+const OTA_CHUNK_BYTES = 256;
+
+let otaCancelRequested = false;
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function setOtaUi({ running, progress = 0, status }) {
+  $("otaProgressBar").style.width = `${Math.round(progress * 100)}%`;
+  if (status != null) $("otaStatus").textContent = status;
+  $("btnOtaFlash").disabled = running || $("otaFile").files.length === 0;
+  $("btnOtaCancel").hidden = !running;
+  $("otaFile").disabled = running;
+}
+
+/// Push `file` (an ArrayBuffer-able .bin) into the device over the current
+/// connection. Throws on failure -- the caller (wireStaticActions' click
+/// handler) is responsible for surfacing the error.
+async function otaFlash(file) {
+  if (!connected) throw new Error("not connected");
+  otaCancelRequested = false;
+
+  // The 1s status poll shares the same serialized command queue as the OTA
+  // chunks below -- left running, it just interleaves extra round trips
+  // between every chunk and clutters the log with poll failures once the
+  // device starts rebooting. Pause it for the duration of the transfer and
+  // resume it only if we're still connected once it's done (a direct-USB
+  // reboot tears the connection down on its own, which already stops it).
+  if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const total = buf.length;
+  logLine(`[console] OTA: starting flash of "${file.name}" (${total} bytes) via ${connVia}`);
+  setOtaUi({ running: true, progress: 0, status: `Starting -- ${total} bytes…` });
+
+  try {
+    // Deliberately NOT sending "size" here, even though it's a real byte
+    // count we already have in hand: passing a known size makes the
+    // firmware's Update.begin() erase the WHOLE required flash region in
+    // one upfront blocking call, which for a multi-hundred-KB+ image can
+    // block the device's main loop for many seconds -- long enough to blow
+    // both this request's own timeout and the FC-UART idle window that
+    // keeps MSP polling off the wire during a passthrough session (see
+    // serialConfigFcUartActive() in serial_config.cpp). Omitting it makes
+    // the firmware fall back to UPDATE_SIZE_UNKNOWN, which erases
+    // incrementally as chunks stream in instead -- the same approach the
+    // existing Wi-Fi /api/ota upload already uses. Confirmed against real
+    // hardware: with a size, "begin" alone can take well over the old 8s
+    // timeout on a ~1.2MB image and corrupt the reply with stray MSP bytes.
+    const begin = await sendCommand({ path: "ota", action: "begin" }, 15000);
+    if (!begin.ok) throw new Error(begin.error || "device rejected OTA begin");
+
+    let sent = 0;
+    for (let off = 0; off < total; off += OTA_CHUNK_BYTES) {
+      if (otaCancelRequested) throw new Error("cancelled");
+      const chunk = buf.subarray(off, Math.min(off + OTA_CHUNK_BYTES, total));
+      const r = await sendCommand({ path: "ota", action: "chunk", data: bytesToBase64(chunk) }, 15000);
+      if (!r.ok) throw new Error(r.error || "chunk write failed");
+      sent += chunk.length;
+      setOtaUi({ running: true, progress: sent / total, status: `Flashing… ${sent} / ${total} bytes` });
+    }
+
+    setOtaUi({ running: true, progress: 1, status: "Finalizing…" });
+    const end = await sendCommand({ path: "ota", action: "end" }, 20000);
+    if (!end.ok) throw new Error(end.error || "device rejected OTA end");
+
+    // Success -- the device is now rebooting into the new firmware. Over a
+    // direct USB-CDC cable that's a real re-enumeration (this SerialPort
+    // will fire "disconnect", same as an unplug), so the user has to press
+    // Connect again once it reappears. Over FC passthrough the FC's own USB
+    // port never closes -- only the C3 on the far end of the UART reboots
+    // -- so once the new firmware's setup() runs, replies just start
+    // flowing again on this same connection with no user action needed.
+    logLine("[console] OTA: flash succeeded, device rebooting into new firmware");
+    setOtaUi({
+      running: false, progress: 1,
+      status: connVia === "fc-uart"
+        ? "Flashed. Device is rebooting into the new firmware -- this console will reconnect automatically once it's back."
+        : "Flashed. Device is rebooting and will re-enumerate as a new USB device -- click Connect again once it reappears.",
+    });
+  } catch (err) {
+    // Best-effort: tell the firmware to bail out of the write it's
+    // mid-way through so a retry can start clean. If the link itself
+    // died (e.g. an actual unplug) this just times out and is swallowed
+    // -- there's nothing left on the other end to abort.
+    try { await sendCommand({ path: "ota", action: "abort" }, 2000); } catch (_) {}
+    setOtaUi({ running: false, progress: 0, status: `Failed: ${err.message}` });
+    throw err;
+  } finally {
+    // Resume normal polling if the connection is still alive -- this is
+    // also what makes the FC-passthrough auto-recovery work: once the
+    // rebooted firmware starts answering again, the next poll just
+    // succeeds on its own. A direct-USB reboot instead fires "disconnect"
+    // and setConnected(false) already clears statusPollTimer for us.
+    if (connected && !statusPollTimer) statusPollTimer = setInterval(pollStatus, 1000);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -645,6 +826,27 @@ function wireStaticActions() {
     }));
 
   $("btnClearLog").addEventListener("click", () => { $("rawLog").innerHTML = ""; });
+
+  $("otaFile").addEventListener("change", () => {
+    const f = $("otaFile").files[0];
+    $("btnOtaFlash").disabled = !f;
+    $("otaStatus").textContent = f ? `${f.name} -- ${f.size} bytes, ready to flash` : "";
+    $("otaProgressBar").style.width = "0%";
+  });
+
+  $("btnOtaFlash").addEventListener("click", (e) => {
+    const f = $("otaFile").files[0];
+    if (!f) return;
+    if (!confirm(
+      `Flash "${f.name}" (${f.size} bytes) to this device now?\n\n` +
+      "The device will be unresponsive to normal commands until this finishes, " +
+      "then it reboots into the new firmware. Don't disconnect or power off the " +
+      "board while this is in progress."
+    )) return;
+    runAction(e.target, () => otaFlash(f));
+  });
+
+  $("btnOtaCancel").addEventListener("click", () => { otaCancelRequested = true; });
 }
 
 if (!("serial" in navigator)) {

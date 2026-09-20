@@ -230,11 +230,25 @@ select option { color: #131a2b; background: #fff; }
 
 .osd-slots {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
 }
 .osd-slot { display: flex; flex-direction: column; }
-.osd-slot .preview { font-size: 11px; color: var(--dim); margin-top: 4px; min-height: 14px; font-family: var(--mono); }
+/* Live OSD preview: renders the slot's text through the real Betaflight
+   font (see docs/app.js), so it's styled like a tiny goggle readout rather
+   than a plain label -- black backing, crisp nearest-neighbor scaling. */
+.osd-slot canvas.osd-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+  background: #000;
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  padding: 3px 4px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
 
 .mono { font-family: var(--mono); }
 .small-pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 8px 0 0; }
@@ -253,6 +267,22 @@ select option { color: #131a2b; background: #fff; }
 }
 
 .hint { font-size: 11px; color: var(--dim); margin-top: 10px; }
+
+.ota-progress {
+  height: 8px;
+  margin-top: 12px;
+  background: var(--glass);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ota-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  transition: width .2s ease;
+}
+.ota-status { font-size: 12px; color: var(--txt); margin: 8px 0 0; min-height: 1.4em; }
 
 .log div.log-dbg { color: var(--dim); }
 .log div.log-json { color: var(--ok); }

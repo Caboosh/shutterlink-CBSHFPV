@@ -14,6 +14,12 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
 
 ---
 
+# CAMERA SUPPORT
+Upstream Shutterlink supports DJI and GoPro, so does my fork, the difference is
+i have used my Osmo Nano to get the DUML over BLE telemetry functional, this will
+need testing on the "mainline" Osmo Action's as i cannot confirm if the telemetry
+is the same on them as it is on the Osmo Nano.
+
 ## Features
 
 - **RC-switch record control** - start/stop recording from *any* AUX channel,
@@ -43,7 +49,9 @@ Betaflight OSD - with a built-in **Glassmorphism Web UI**.
 - **Web Serial bench console** - a GitHub Pages-hosted page (`docs/`) that
   talks straight to the board over USB (no Wi-Fi needed) for bench setup and
   debugging: live status, all the same configuration forms as the field Web
-  UI, unrestricted MSP passthrough, and a raw serial log panel.
+  UI, unrestricted MSP passthrough, OSD live preview, OTA firmware flashing
+  (works through a live Betaflight passthrough session too — no unplugging
+  required), and a raw serial log panel.
 - **Persistent settings** - everything you configure lives in NVS flash.
 - **Status LED patterns** - know your link state at a glance on the bench.
 - **Modular firmware** - `msp_protocol` (FC side), `fc_status` (arming),
@@ -315,12 +323,15 @@ no conflict.
 | `{"path":"camera", ...}` | Same fields as `POST /api/camera` |
 | `{"path":"command","cmd":"start"\|"stop"\|"reboot"}` | Same as `POST /api/command` |
 | `{"path":"msp","cmd":<u8>}` | MSP passthrough — **unrestricted** here (unlike `/api/msp`'s read-only allowlist), since this channel requires a physical USB cable, a much higher trust bar than the Wi-Fi AP. Only works over the direct USB port — see below |
+| `{"path":"ota","action":"begin","size":<u32, optional>}` | Start a firmware update — see "Flashing firmware over Web Serial" below |
+| `{"path":"ota","action":"chunk","data":"<base64>"}` | Write one chunk (≤ `OTA_CHUNK_MAX_BYTES` raw bytes, base64-encoded) |
+| `{"path":"ota","action":"end"}` | Finalize and reboot into the new firmware |
+| `{"path":"ota","action":"abort"}` | Cancel an in-progress update, leaving the currently-running firmware untouched |
 
 Only one request is in flight at a time — send a command and wait for the
-next `{`-prefixed reply line before sending another. `/api/scan` and OTA
-firmware flashing are intentionally out of scope for this transport (scan
-results are already embedded in the status response; OTA-over-Web-Serial
-would need a chunked-upload + bootloader handshake, its own feature).
+next `{`-prefixed reply line before sending another. `/api/scan` is
+intentionally out of scope for this transport (scan results are already
+embedded in the status response).
 
 ### Reaching it without a USB cable to the C3 (Betaflight passthrough)
 
@@ -394,14 +405,52 @@ end on its own, and a normal reboot/reconnect isn't enough — and
 `{"path":"msp",...}` on this channel always replies with an error, since
 there's no independent live FC left on the wire to bounce the MSP request
 off. Use the direct USB cable for MSP passthrough; use the
-FC-UART/passthrough route for everything else
-(`ping`/`status`/`settings`/`camera`/`command`).
+FC-UART/passthrough route for everything else, including firmware updates
+(`ping`/`status`/`settings`/`camera`/`command`/`ota`).
 
 The logic behind both transports lives once, in `api_core.cpp` — `web_server.cpp`'s
 HTTP handlers and `serial_config.cpp`'s dispatcher are both thin wrappers
 around the same `apiBuildStatusJson()` / `apiApplySettings()` /
 `apiApplyCamera()` / `apiApplyCommand()` functions, so the two can't drift
 out of sync with each other.
+
+### Flashing firmware over Web Serial (no unplugging required)
+
+The bench console's **Firmware update** card flashes a new `firmware.bin`
+straight over whichever serial connection is already open — the direct USB
+cable, *or* a live Betaflight passthrough session. That second option is
+the interesting one: once the C3 is installed in the quad, you can update
+its firmware through the FC's own USB port, without ever unplugging the C3
+or pulling it off the frame — the same idea
+[ExpressLRS's own configurator](https://github.com/ExpressLRS/ExpressLRS)
+uses to reflash a receiver wired to an FC UART.
+
+This is **not** a ROM-bootloader flash (that needs hardware control of the
+C3's boot-strap and reset pins, which a plain UART bridge can't reach) — it's
+an application-level update using the same
+[`Update.h`](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/update.html)
+mechanism the Wi-Fi Web UI's OTA upload already uses, writing into the
+board's spare OTA partition (`min_spiffs.csv` gives it two). Pick a `.bin`
+built with `pio run`, hit **Flash firmware**, and the console drives
+`{"path":"ota",...}` begin/chunk/end over the line protocol above — one
+`OTA_CHUNK_MAX_BYTES`-sized, base64-encoded chunk per request/reply round
+trip, same serialized command queue as every other bench command. The
+device only switches over to the new image once the write verifies clean
+(`Update.end(true)`), so a failed transfer or a cancel just leaves the
+currently-running firmware in place.
+
+What happens after a successful flash differs by connection: over the
+direct USB cable, the reboot is a real USB re-enumeration, so reconnect
+manually once the board reappears. Over an FC passthrough session, only the
+C3 on the far end of the UART reboots — the FC's own USB connection to your
+PC never drops — so the console just starts getting replies again on its
+own once the new firmware's `setup()` runs.
+
+Since this is the C3's *own* update mechanism, it has to already be running
+ShutterLink firmware that includes the `ota` serial command before you can
+use it this way — flash the first build via the normal USB/PlatformIO
+workflow (Step 1), and every build after that can go over the air, on the
+bench or through the FC.
 
 ---
 
@@ -533,10 +582,11 @@ See "Web Serial Bench Console" above for the USB equivalent of this surface.
 - [x] OTA firmware update from the Web UI
 - [x] Wi-Fi power switch on a spare AUX channel
 - [x] Web Serial bench console (GitHub Pages, USB transport)
+- [x] OSD live preview in the bench console (renders Custom Messages through the real Betaflight OSD font)
 - [ ] Lightweight MSP config panel ("configurator-lite" subtab)
 - [ ] Profiles , Camera configuration.
 - [x] Full DJI telemetry parse (battery %, rec time from DUML notifications)
-- [ ] OTA firmware flashing over Web Serial (chunked upload + bootloader handshake)
+- [x] OTA firmware flashing over Web Serial, including through a live Betaflight passthrough session (app-level chunked upload into the spare OTA partition — see "Web Serial Bench Console" below)
 
 ## Credits & References
 
@@ -547,7 +597,15 @@ See "Web Serial Bench Console" above for the USB equivalent of this surface.
 - [Easy4Racing/bf_custom_osd_msg_example](https://github.com/Easy4Racing/bf_custom_osd_msg_example) - BF custom message reference
 - [betaflight/betaflight](https://github.com/betaflight/betaflight) - MSP protocol source of truth
 - [itsfpv CamLink](https://itsfpv.de/en-int/products/camlink) - the commercial product this project replicates
+- [betaflight/betaflight-configurator](https://github.com/betaflight/betaflight-configurator) - the stock OSD font (`resources/osd/2/betaflight.mcm`, **GPL-3.0**) decoded into `docs/assets/osd-font.png` for the Bench Console's OSD live preview. That one asset is GPL-3.0, distinct from the rest of this MIT-licensed repo -- see the License section.
 
 ## License
 
 MIT - do what you want, fly safe, and land your protocols responsibly.
+
+**Exception:** `docs/assets/osd-font.png` is decoded from betaflight-configurator's
+stock OSD font (`resources/osd/2/betaflight.mcm`) and remains **GPL-3.0**,
+per the upstream project's license -- see Credits & References above. It's
+a static image asset used only to render the Bench Console's OSD live
+preview; it isn't linked into the firmware or required to build/run
+anything else in this repo.
