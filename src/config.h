@@ -30,6 +30,14 @@
 // Betaflight default MSP baud is 115200.
 #define FC_UART_BAUD          115200
 
+// How recently a Web Serial bench command must have arrived over Serial1
+// (the FC UART, i.e. a Betaflight serial passthrough session) for
+// serialConfigFcUartActive() to report the channel as an active bench
+// session rather than a live FC link. Generous relative to the bench
+// console's 1 Hz status poll so brief hiccups don't flap it, short enough
+// to resume normal FC polling promptly once the bench session ends.
+#define FC_UART_BENCH_IDLE_MS 3000
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Default User Settings (editable at runtime via Web UI / stored in NVS)
 // ──────────────────────────────────────────────────────────────────────────────

@@ -217,14 +217,27 @@ void loop() {
     // 1. Camera management: scan, connect, keep-alive, auto-reconnect.
     camUpdate();
 
+    // While a Web Serial bench session is actively using Serial1 (i.e. a
+    // Betaflight serial passthrough session bridges that UART to a
+    // browser instead of a live FC), skip our own outbound MSP polling.
+    // Those requests would otherwise go out over Serial1 exactly as
+    // always, get faithfully relayed by the passthrough bridge straight
+    // back to the browser, and corrupt its JSON line framing (raw MSP
+    // frames carry no '\n', so they glue onto the front of the next real
+    // JSON reply). There's no live FC to poll during passthrough anyway,
+    // so skipping costs nothing beyond the bench status view's "FC" field
+    // freezing at whatever it last read rather than promptly ticking over
+    // to "no link" — cosmetic, and expected during a bench-only session.
+    bool fcUartBenchActive = serialConfigFcUartActive();
+
     // 2. Send periodic MSP_RC requests to the Flight Controller.
-    mspPollRC();
+    if (!fcUartBenchActive) mspPollRC();
 
     // 3. Parse any incoming UART bytes from the FC (RC + status/analog).
     mspReadIncoming();
 
     // 4. FC polling state machine (arm detection, battery, identity).
-    fcStatusUpdate();
+    if (!fcUartBenchActive) fcStatusUpdate();
 
     // 5. Recording decision engine: switch + record-on-arm + manual.
     recorderUpdate();

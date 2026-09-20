@@ -28,4 +28,16 @@ void serialConfigUpdate();
 /// never call Serial1.available()/read() independently in here.
 void serialConfigFeedFcUartByte(uint8_t b);
 
+/// True while a bench command has been received over Serial1 (the FC UART)
+/// within the last FC_UART_BENCH_IDLE_MS — i.e. a Betaflight serial
+/// passthrough session is actively bridging that UART to a browser rather
+/// than a live FC. main.cpp uses this to pause its own periodic MSP polling
+/// (mspPollRC(), fcStatusUpdate()) during that window: those requests would
+/// otherwise still go out over Serial1 as always, get faithfully forwarded
+/// by the passthrough bridge straight back to the browser, and corrupt the
+/// JSON line framing there (raw MSP frames contain no '\n', so they glue
+/// onto the front of the next real JSON reply). There's no live FC to
+/// poll during passthrough anyway, so pausing costs nothing.
+bool serialConfigFcUartActive();
+
 #endif // SERIAL_CONFIG_H
