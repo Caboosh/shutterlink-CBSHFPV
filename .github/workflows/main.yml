@@ -28,5 +28,5 @@ jobs:
         with:
           name: firmware.bin
           path: |
-            ~/.pio/build/esp32c3/
+            ~/.pio/build/esp32c3
           retention-days: 10
