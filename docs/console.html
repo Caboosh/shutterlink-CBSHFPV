@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bench Console — ShutterLink</title>
+<title>Configurator — ShutterLink</title>
 <meta name="description" content="Configure and debug your ShutterLink ESP32-C3 directly over USB using the browser's Web Serial API — no Wi-Fi network required.">
 <script>(function(){try{var t=localStorage.getItem('shutterlink.theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <link rel="stylesheet" href="assets/site.css">
@@ -32,7 +32,7 @@
     <a href="index.html">Home</a>
     <a href="setup.html">Setup Guide</a>
     <a href="webui.html">Web UI Guide</a>
-    <a href="console.html">Bench Console</a>
+    <a href="console.html">Configurator</a>
     <a href="reference.html">Reference</a>
   </nav>
   <div class="header-actions">
@@ -41,6 +41,24 @@
   </div>
 </header>
 
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="connDot"></span>
+    <h1>ShutterLink <span class="muted">Configurator</span></h1>
+  </div>
+    <div class="conn-controls">
+    <span id="connLabel" class="muted" style="margin: 23px 30px 0 0">Not connected</span>
+    <label>FC UART # (Ports tab, wired to the C3)
+      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
+    </label>
+    <label>Baud
+      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
+    </label>
+      <button id="btnConnectPassthrough" class="btn" style="margin-top: 23px">Connect (FC Passthrough)</button>
+      <button id="btnConnect" class="btn primary" style="margin-top: 23px">Connect over USB</button>
+      <button id="btnDisconnect" class="btn" style="margin-top: 23px" hidden>Disconnect</button>
+  </div>
+</header>
 <div class="notice" style="margin:14px 20px 0">
   <svg><use href="#i-usb"/></svg>
   <p>
@@ -51,39 +69,6 @@
     and Betaflight-passthrough mechanics.
   </p>
 </div>
-
-<header class="topbar">
-  <div class="brand">
-    <span class="dot" id="connDot"></span>
-    <h1>ShutterLink <span class="muted">Bench Console</span></h1>
-  </div>
-  <div class="conn-controls">
-    <span id="connLabel" class="muted">Not connected</span>
-    <button id="btnConnect" class="btn primary">Connect over USB</button>
-    <button id="btnDisconnect" class="btn" hidden>Disconnect</button>
-  </div>
-</header>
-
-<details class="passthrough-panel" id="passthroughPanel">
-  <summary>C3 not reachable over USB? Connect via Betaflight passthrough instead</summary>
-  <div class="row">
-    <label>FC UART # (Ports tab, wired to the C3)
-      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
-    </label>
-    <label>Baud
-      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
-    </label>
-    <button id="btnConnectPassthrough" class="btn">Connect via FC passthrough</button>
-  </div>
-  <p class="hint">
-    Opens the FC's own USB port, drives its CLI the way Betaflight Configurator's CLI tab does
-    (<code>#</code>, then <code>serial</code> to check which argument style this firmware wants,
-    then <code>serialpassthrough</code>), then talks to the C3 straight over that same connection —
-    no Configurator window, no reconnecting to a different port. The FC stops flying the instant
-    passthrough starts and needs a power cycle afterwards to fly again, so this is a
-    bench/disarmed-only connection method, same as the direct USB one.
-  </p>
-</details>
 
 <p class="unsupported" id="unsupportedNotice" hidden>
   Your browser doesn't support the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>.

@@ -1,5 +1,5 @@
 // ============================================================================
-// app.js — ShutterLink Bench Console (Web Serial)
+// app.js — ShutterLink Configurator (Web Serial)
 // ============================================================================
 // Talks to the firmware's serial_config.cpp line-oriented JSON protocol,
 // reachable over either of two ports:

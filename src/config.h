@@ -35,7 +35,7 @@
 // serialConfigFcUartActive() to report the channel as an active bench
 // session rather than a live FC link.
 //
-// Must comfortably exceed the bench console's worst-case request cycle,
+// Must comfortably exceed the Configurator's worst-case request cycle,
 // not just its steady-state poll interval: docs/app.js polls status every
 // 1000ms but gives each request up to a 4000ms timeout before giving up
 // (sendCommand()'s default timeoutMs), and requests are serialized, so a
@@ -44,7 +44,7 @@
 // be 3000ms), the very first hiccup would let mspPollRC()/fcStatusUpdate()
 // resume, spray raw MSP bytes onto Serial1, corrupt the *next* reply too,
 // and repeat forever — a self-sustaining failure loop that looks like the
-// bench console never working, rather than one bad poll. 8000ms gives that
+// Configurator never working, rather than one bad poll. 8000ms gives that
 // retry room to succeed cleanly while still resuming normal FC polling
 // reasonably promptly once a bench session actually ends.
 #define FC_UART_BENCH_IDLE_MS 8000

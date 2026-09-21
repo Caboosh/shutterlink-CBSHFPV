@@ -1,6 +1,6 @@
-# shutterlink
+# shutterlink - CBSHFPV Edition.
 
-Open-source CamLink alternative: an ESP32-C3 BLE bridge that turns a radio
+Open-source CamLink alternative based on [shutterlink](https://github.com/rover1312/shutterlink): an ESP32-C3 BLE bridge that turns a radio
 switch (or your arming switch!) into record control for **DJI Osmo Action**
 and **GoPro HERO8+** cameras, and pushes live camera telemetry into the
 Betaflight OSD - with a built-in **Glassmorphism Web UI**.
@@ -25,35 +25,46 @@ is the same on them as it is on the Osmo Nano.
 - **RC-switch record control** - start/stop recording from *any* AUX channel,
   read straight from Betaflight via MSP. Channel, threshold and debounce are
   configurable from the Web UI - no recompiling.
+
 - **Record-on-arm** - optional auto-start when the FC arms, with optional
   stop-on-disarm. Toggle it in the Web UI.
+
 - **Parallel OSD telemetry on all 4 Custom Messages** - assign any of
   Cam status / Rec time / Battery / Link state / FC battery / Arm state / Off
   to each slot via the Web UI. Pushed with `MSP2_SET_TEXT` (MSP v2, `0x3007`).
+
 - **Two camera backends** - DJI Osmo Action (DUML over BLE) and GoPro HERO8
   through HERO13 (official Open GoPro BLE API), switchable at runtime.
+
 - **Saved-camera registry + discovery scanning** - scan for nearby cameras
   from the Web UI, **Pair & Save** the one that's yours (up to 4 saved), and
   the ESP32 auto-reconnects to it forever after - no ghost devices, nothing
   is written to flash without your explicit consent.
+
 - **Wi-Fi power switch** - assign a spare AUX channel to toggle the Web-UI
   hotspot on/off in flight (saves ~60-100 mA; the BLE camera link keeps
   running).
+
 - **Robust BLE link** - auto-reconnect, keep-alive, non-blocking state
   machine. Camera commands are absolute start/stop (never toggles), so
   retries after reconnects are always safe.
+  
 - **Built-in Web UI** - connect to the ESP32's Wi-Fi network and a modern
   Glassmorphism dashboard opens automatically (captive portal): live status,
   manual REC/STOP buttons, all configuration, OTA firmware updates, dark &
   light mode, frosted-glass SVG icon set.
-- **Web Serial bench console** - a GitHub Pages-hosted page (`docs/`) that
+
+- **Web Serial Configurator** - a GitHub Pages-hosted page (`docs/`) that
   talks straight to the board over USB (no Wi-Fi needed) for bench setup and
-  debugging: live status, all the same configuration forms as the field Web
-  UI, unrestricted MSP passthrough, OSD live preview, OTA firmware flashing
-  (works through a live Betaflight passthrough session too — no unplugging
-  required), and a raw serial log panel.
+  debugging: live status, all the same configuration forms as the Web UI, 
+  unrestricted MSP passthrough, OSD live preview, OTA firmware flashing
+  (works through Betaflight passthrough too — no unplugging required), 
+  and a raw serial log panel.
+
 - **Persistent settings** - everything you configure lives in NVS flash.
+
 - **Status LED patterns** - know your link state at a glance on the bench.
+
 - **Modular firmware** - `msp_protocol` (FC side), `fc_status` (arming),
   `dji_camera` / `gopro_camera` (camera side), `camera_manager` (dispatch),
   `cam_registry` + `scan_results` (pairing), `recorder` (decision engine),
@@ -77,24 +88,27 @@ is the same on them as it is on the Osmo Nano.
                                                                        |
                  phone/PC  <-- Wi-Fi AP + captive portal --------------+
                                   (Web UI)
-                 bench PC  <-- USB Web Serial (docs/ bench console) ---+
+                 bench PC  <-- USB Web Serial (docs/ configurator) ---+
 ```
 
 1. **Switch / arm to ESP32:** polls `MSP_RC` every 200 ms; watches your
    configured AUX channel (debounced, configurable threshold). Polls
    `MSP_STATUS` + `MSP_BOXIDS` for arming state.
+
 2. **ESP32 to Camera:** desired-recording = switch ON OR (record-on-arm AND
    armed). On transitions it sends the camera's absolute start/stop command
-   over BLE. Manual buttons in the Web UI (or bench console) do the same.
+   over BLE. Manual buttons in the Web UI (or configurator) do the same.
+
 3. **Camera to OSD:** up to four independent strings pushed on change (checked
    every 500 ms) into Betaflight Custom Messages 1-4 via `MSP2_SET_TEXT`.
+
 4. **Web UI:** the ESP32 runs a SoftAP (default SSID `ShutterLink`, password
    `shutterlink`). Browse to `http://192.168.4.1`.
-5. **Bench console:** the same configuration surface is also reachable over
-   USB from `docs/index.html` (see "Web Serial Bench Console" below) — useful
+
+5. **configurator:** the same configuration surface is also reachable over
+   USB from `docs/index.html` (see "Web Serial configurator" below) — useful
    on the bench without joining the ESP32's Wi-Fi network, and for reading
    MSP without the Wi-Fi API's read-only restriction.
-
 ---
 
 ## Hardware Requirements
@@ -116,8 +130,7 @@ is the same on them as it is on the Osmo Nano.
 > still appears in the serial monitor fine (it's routed via the IDF console
 > over USB-Serial-JTAG regardless), but anything you *type* into the
 > monitor is silently lost — `Serial.read()` never sees it, even at the
-> byte level. This affects both the plain debug console and the Web Serial
-> bench protocol.
+> byte level. This affects both the plain debug console and Web Serial.
 
 ---
 
@@ -150,9 +163,11 @@ The on-board status LED (GPIO8 on most C3 boards) blinks the link state:
 
 1. **Ports tab:** enable **MSP** on the UART wired to the ESP32
    (115200 baud, leave everything else off for that port).
+
 2. **OSD tab:** place **Custom Message 1-4** elements wherever you want them
    on your screen - position comes from Betaflight, *content* is pushed live
    by ShutterLink.
+
 3. Assign an AUX channel (on your radio's mixes tab) as your record switch if
    you want switch control. You don't need to create a Betaflight *mode* for
    it - ShutterLink reads the raw RC channels.
@@ -186,27 +201,35 @@ above.
 ### Step 4 - Connect to the Web UI
 
 1. Power the ESP32 (FC 5 V or USB).
+
 2. On your phone or PC, join the Wi-Fi network **`ShutterLink`**
    (password: **`shutterlink`**).
+
 3. The captive portal opens automatically on most devices; otherwise browse
    to **`http://192.168.4.1`**.
+
 4. You land on the **Dashboard** with live status cards.
 
 ### Step 5 - Pair your camera
 
 1. Power the camera on and put it within a few metres of the ESP32.
+
 2. In the Web UI open the **Camera** tab.
+
 3. Tap **Scan for Cameras** - a one-shot 5-second BLE scan runs and lists
    nearby cameras (brand is auto-detected; strongest signal first).
    - Camera not in the list? Tap **"Camera not listed? Show all nearby
      devices"** and pick yours by signal strength (hold it within 1 m -
      the strongest RSSI is usually yours).
+
 4. Tap **Pair & Save** on your camera. This is the only moment anything is
    written to flash - devices the radio merely *sees* are never persisted.
+
 5. Watch the camera screen:
    - **GoPro:** the first ever connection asks for a **one-time approval
      tap** on the camera's own screen. After that, reconnection is silent.
    - **DJI:** an approve prompt may appear once - tap approve.
+
 6. The LED goes solid and the Dashboard shows the camera model + battery.
    From now on the ESP32 reconnects to this camera automatically, no scan
    needed.
@@ -217,11 +240,14 @@ from the **Saved cameras** card in the same tab.
 ### Step 6 - Configure the record switch
 
 1. Open the **Controls** tab.
+
 2. Pick your **switch channel** (CH5-16 / AUX1-12), the **ON threshold**
    (default 1500 us) and **debounce** (default 300 ms) - hit **Save switch
    settings**.
+
 3. Optional: enable **Record on arm** (+ **Stop on disarm**) so recording
    follows the arming state instead of a switch.
+
 4. Flip the switch and watch the Dashboard: the record-switch card should
    flip from IDLE to ON, and the camera starts/stops recording.
 
@@ -229,6 +255,7 @@ from the **Saved cameras** card in the same tab.
 
 - **OSD tab:** assign content (Cam status / Rec time / Battery / Link / FC
   battery / Arm state / Off) to Custom Messages 1-4 with live previews.
+
 - **Controls tab:** change the Wi-Fi SSID/password, or assign a spare AUX
   channel as a **Wi-Fi radio switch** - flip it low in flight and the hotspot
   powers down to save ~60-100 mA (BLE camera control keeps running; the AP
@@ -258,8 +285,10 @@ The Camera tab has three cards:
 
 1. **Active connection** - which camera is connected right now, its model,
    battery and link state.
+
 2. **Saved cameras** - your NVS registry (max 4). Tap an entry to make it
-   active and connect immediately; remove entries you no longer own.
+   active and connect immediately; remove entries you no longer use.
+
 3. **Discover new camera** - the pairing workflow:
    - Press **Scan for Cameras** (5-second one-shot window, results sorted by
      signal strength, type auto-detected).
@@ -295,13 +324,13 @@ page or power off mid-upload; if it fails, re-flash over USB.
 
 ---
 
-## Web Serial Bench Console
+## Web Serial Configurator
 
 `docs/` (served as GitHub Pages, e.g. `https://<user>.github.io/shutterlink/`)
 is a standalone page that talks to the ESP32 directly over USB using the
 browser's [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API) —
 no Wi-Fi network required. Useful for bench setup, and it shares a raw
-`DBG()` log panel you don't get from the field Web UI.
+`DBG()` log panel you don't get from the SoftAP Web UI.
 
 **Requirements:** a Chromium-based desktop browser (Chrome, Edge, Opera) and
 a secure context — `https://` (GitHub Pages is fine) or `http://localhost`.
@@ -333,17 +362,16 @@ next `{`-prefixed reply line before sending another. `/api/scan` is
 intentionally out of scope for this transport (scan results are already
 embedded in the status response).
 
-### Reaching it without a USB cable to the C3 (Betaflight passthrough)
+### Betaflight passthrough
 
 Once the ESP32-C3 is installed in the quad, its own USB-C port is often
 buried or hard to reach. Since the C3 is already wired to a free FC UART for
-MSP (see Step 1), the same bench-config protocol also listens on that UART
+MSP (see Step 1), the same web-serial protocol also listens on that UART
 (`Serial1`), reachable through **Betaflight's serial passthrough** feature
-via the FC's own, more accessible USB port — no extra cable, no
-disassembly.
+via the FC's own, more accessible USB port.
 
-**One click, no Betaflight Configurator needed:** the bench console
-(`docs/`) drives this itself. Expand **"C3 not reachable over USB? Connect
+**One click, no Betaflight Configurator needed:** the configurator
+(`docs/`) handles this. Expand **"C3 not reachable over USB? Connect
 via Betaflight passthrough instead"**, enter the **FC UART number** wired to
 the C3 (as printed on the Ports tab, e.g. `3` for UART3 — not a zero-based
 index, the page converts that for you) and the baud rate (matches
@@ -384,21 +412,12 @@ a stale MSP session that never switched over.
 >   `serialpassthrough UART4 115200`. A bare numeric id now fails with
 >   `Invalid port1`.
 >
-> The bench console runs `serial` itself first and reads which style this
+> The configurator runs `serial` itself first and reads which style this
 > firmware actually prints, rather than assuming one — see
 > `resolvePassthroughTarget()` in `docs/app.js` if you're debugging this by
 > hand.
 
-If you'd rather drive it by hand (e.g. debugging a passthrough issue, or a
-browser build where the automated CLI nudge doesn't behave): open Betaflight
-Configurator's CLI tab yourself, run `serial` to see which style your
-firmware wants, then `serialpassthrough <target> <baud>` per the version
-note above, close the Configurator so the OS COM port is free, then use the
-plain **"Connect over USB"** button and pick that same COM port when
-prompted — from the browser's side it's an identical serial connection
-either way.
-
-Caveats while a passthrough session is open: the FC isn't running its own
+Caveats while passthrough is open: the FC isn't running its own
 firmware, so the ESP32 loses live FC telemetry (arm state, RC-switch
 polling, OSD pushes) until you **power-cycle the FC** — passthrough doesn't
 end on its own, and a normal reboot/reconnect isn't enough — and
@@ -414,9 +433,22 @@ around the same `apiBuildStatusJson()` / `apiApplySettings()` /
 `apiApplyCamera()` / `apiApplyCommand()` functions, so the two can't drift
 out of sync with each other.
 
+### **Why do we need to specify a UART?**
+We can't guess which UART to use for the MSP Passthrough like ELRS Can for Receiver
+flashing, as depending on your quad setup and features the Flight Controller has you
+can have more than one MSP connection enabled on more than one UART. 
+
+You'll usually only ever have one ELRS Receiver connected to a UART, which is then set to SerialRx 
+in the ports tab, so ELRS Configurator can look at `serial` and go "That one has SerialRx enabled, 
+we'll use passthrough for that UART".
+
+*But we can't,* as your VTX may communicate over MSP (HDZero Freestyle V2, for example), 
+if your FC has bluetooth on board, that uses MSP to connect to the Betaflight App/Speedybee App, 
+and of course, the C3 is using MSP as well. 
+
 ### Flashing firmware over Web Serial (no unplugging required)
 
-The bench console's **Firmware update** card flashes a new `firmware.bin`
+The configurator's **Firmware update** card flashes a new `firmware.bin`
 straight over whichever serial connection is already open — the direct USB
 cable, *or* a live Betaflight passthrough session. That second option is
 the interesting one: once the C3 is installed in the quad, you can update
@@ -425,10 +457,7 @@ or pulling it off the frame — the same idea
 [ExpressLRS's own configurator](https://github.com/ExpressLRS/ExpressLRS)
 uses to reflash a receiver wired to an FC UART.
 
-This is **not** a ROM-bootloader flash (that needs hardware control of the
-C3's boot-strap and reset pins, which a plain UART bridge can't reach) — it's
-an application-level update using the same
-[`Update.h`](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/update.html)
+This is  an application-level update using the same [`Update.h`](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/update.html)
 mechanism the Wi-Fi Web UI's OTA upload already uses, writing into the
 board's spare OTA partition (`min_spiffs.csv` gives it two). Pick a `.bin`
 built with `pio run`, hit **Flash firmware**, and the console drives
@@ -440,10 +469,11 @@ device only switches over to the new image once the write verifies clean
 currently-running firmware in place.
 
 What happens after a successful flash differs by connection: over the
-direct USB cable, the reboot is a real USB re-enumeration, so reconnect
-manually once the board reappears. Over an FC passthrough session, only the
-C3 on the far end of the UART reboots — the FC's own USB connection to your
-PC never drops — so the console just starts getting replies again on its
+direct USB cable, the reboot is a USB re-enumeration, so reconnect once 
+the board reappears on your PC. 
+
+Over an FC passthrough session, only the C3 reboots — the FC's USB connection
+to your PC stays active — so the configurator starts getting replies again on its
 own once the new firmware's `setup()` runs.
 
 Since this is the C3's *own* update mechanism, it has to already be running
@@ -492,13 +522,14 @@ console). Compile-time defaults are in `src/config.h`:
 
 | Define | Default | Purpose |
 |---|---|---|
-| `FC_UART_RX_PIN` / `FC_UART_TX_PIN` | 20 / 21 | UART pins to the FC |
+| `FC_UART_RX_PIN` / `FC_UART_TX_PIN` | 5 / 4 | UART pins to the FC |
 | `DEFAULT_CAMERA_TYPE` | DJI | Initial camera backend |
-| `DEFAULT_AUX_CHANNEL_INDEX` | 8 | RC channel used as record switch |
-| `DEFAULT_RC_THRESHOLD_US` | 1500 | us above = ON |
+| `DEFAULT_AUX_CHANNEL_INDEX` | 4 | RC channel used as record switch |
+| `DEFAULT_RC_THRESHOLD_US` | 1800 | us above = ON |
 | `DEFAULT_RC_DEBOUNCE_MS` | 300 | Switch debounce |
 | `DEFAULT_RECORD_ON_ARM` | false | Auto-record on arming |
 | `DEFAULT_STOP_ON_DISARM` | true | Stop when FC disarms |
+|`DEFAULT_STOP_ON_DISARM_DELAY_MS`| 0 | Configurable Delay (in ms) when disarmed, allowing for a grace period when turtling out of a crash |
 | `DEFAULT_SCAN_ALL` | false | Show all BLE advertisers during discovery |
 | `DEFAULT_WIFI_SWITCH_CH` | 255 (off) | AUX channel toggling the Wi-Fi AP |
 | `WIFI_AP_DEFAULT_SSID` / `_PASS` | ShutterLink / shutterlink | Web UI hotspot |
@@ -512,7 +543,7 @@ shutterlink/
 +-- platformio.ini          # ESP32-C3 build config + NimBLE dependency +
 |                            #   native-USB CDC flags
 +-- README.md
-+-- docs/                   # GitHub Pages Web Serial bench console
++-- docs/                   # GitHub Pages Web Serial configurator
 |   +-- index.html
 |   +-- style.css
 |   +-- app.js
@@ -559,7 +590,7 @@ shutterlink/
 | `GET /api/scan` | Current scan results |
 | `POST /api/ota` / `GET /api/ota/status` | OTA firmware update |
 
-See "Web Serial Bench Console" above for the USB equivalent of this surface.
+See "Web Serial configurator" above for the USB equivalent of this surface.
 
 ## Known Limitations (ESP32-C3)
 
@@ -581,12 +612,12 @@ See "Web Serial Bench Console" above for the USB equivalent of this surface.
 - [x] Camera registry with discovery scan + Pair & Save
 - [x] OTA firmware update from the Web UI
 - [x] Wi-Fi power switch on a spare AUX channel
-- [x] Web Serial bench console (GitHub Pages, USB transport)
-- [x] OSD live preview in the bench console (renders Custom Messages through the real Betaflight OSD font)
+- [x] Web Serial configurator (GitHub Pages, USB transport)
+- [x] OSD live preview in the configurator (renders Custom Messages through the real Betaflight OSD font)
+- [x] Full DJI telemetry parse (battery %, rec time from DUML notifications, Tested with Osmo Nano)
+- [x] OTA firmware flashing over Web Serial, including through Betaflight passthrough (app-level chunked upload into the spare OTA partition)
 - [ ] Lightweight MSP config panel ("configurator-lite" subtab)
 - [ ] Profiles , Camera configuration.
-- [x] Full DJI telemetry parse (battery %, rec time from DUML notifications)
-- [x] OTA firmware flashing over Web Serial, including through a live Betaflight passthrough session (app-level chunked upload into the spare OTA partition — see "Web Serial Bench Console" below)
 
 ## Credits & References
 
@@ -597,7 +628,7 @@ See "Web Serial Bench Console" above for the USB equivalent of this surface.
 - [Easy4Racing/bf_custom_osd_msg_example](https://github.com/Easy4Racing/bf_custom_osd_msg_example) - BF custom message reference
 - [betaflight/betaflight](https://github.com/betaflight/betaflight) - MSP protocol source of truth
 - [itsfpv CamLink](https://itsfpv.de/en-int/products/camlink) - the commercial product this project replicates
-- [betaflight/betaflight-configurator](https://github.com/betaflight/betaflight-configurator) - the stock OSD font (`resources/osd/2/betaflight.mcm`, **GPL-3.0**) decoded into `docs/assets/osd-font.png` for the Bench Console's OSD live preview. That one asset is GPL-3.0, distinct from the rest of this MIT-licensed repo -- see the License section.
+- [betaflight/betaflight-configurator](https://github.com/betaflight/betaflight-configurator) - the stock OSD font (`resources/osd/2/betaflight.mcm`, **GPL-3.0**) decoded into `docs/assets/osd-font.png` for the configurator's OSD live preview. That one asset is GPL-3.0, distinct from the rest of this MIT-licensed repo -- see the License section.
 
 ## License
 
@@ -606,6 +637,6 @@ MIT - do what you want, fly safe, and land your protocols responsibly.
 **Exception:** `docs/assets/osd-font.png` is decoded from betaflight-configurator's
 stock OSD font (`resources/osd/2/betaflight.mcm`) and remains **GPL-3.0**,
 per the upstream project's license -- see Credits & References above. It's
-a static image asset used only to render the Bench Console's OSD live
+a static image asset used only to render the configurator's OSD live
 preview; it isn't linked into the firmware or required to build/run
 anything else in this repo.

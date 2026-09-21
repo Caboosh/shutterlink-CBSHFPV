@@ -31,7 +31,7 @@
     <a href="index.html">Home</a>
     <a href="setup.html">Setup Guide</a>
     <a href="webui.html">Web UI Guide</a>
-    <a href="console.html">Bench Console</a>
+    <a href="console.html">Configurator</a>
     <a href="reference.html">Reference</a>
   </nav>
   <div class="header-actions">
@@ -75,7 +75,7 @@
             every 500&nbsp;ms) into Betaflight Custom Messages 1–4 via <code>MSP2_SET_TEXT</code>.</li>
           <li><strong>Web UI:</strong> the ESP32 runs a SoftAP (default SSID <code>ShutterLink</code>,
             password <code>shutterlink</code>). Browse to <code>http://192.168.4.1</code>.</li>
-          <li><strong>Bench console:</strong> the same configuration surface is also reachable over USB
+          <li><strong>Configurator:</strong> the same configuration surface is also reachable over USB
             from this site — useful on the bench without joining the ESP32's Wi-Fi network, and for
             reading MSP without the Wi-Fi API's read-only restriction.</li>
         </ol>
@@ -118,7 +118,7 @@
           <strong>Betaflight's serial passthrough</strong> feature via the FC's own, more accessible USB
           port — no extra cable, no disassembly.</p>
         <p><strong>One click, no Betaflight Configurator needed:</strong> the
-          <a href="console.html">bench console</a> drives this itself. Expand "C3 not reachable over USB?
+          <a href="console.html">Configurator</a> drives this itself. Expand "C3 not reachable over USB?
           Connect via Betaflight passthrough instead", enter the FC UART number wired to the C3 and the
           baud rate, then hit <strong>Connect via FC passthrough</strong>. Behind the scenes the page:</p>
         <ol>
@@ -154,7 +154,7 @@
             <tr><td><strong>25.12+</strong></td><td><code>serial</code> now names each port (<code>serial UART4 1 115200 …</code>) and <code>serialpassthrough</code> takes that same name directly — <code>serialpassthrough UART4 115200</code>. A bare numeric id now fails with <code>Invalid port1</code>.</td></tr>
           </table>
         </div>
-        <p>The bench console runs <code>serial</code> itself first and reads which style this firmware
+        <p>The Configurator runs <code>serial</code> itself first and reads which style this firmware
           actually prints, rather than assuming one — see <code>resolvePassthroughTarget()</code> in
           <code>docs/app.js</code> if you're debugging this by hand. If you'd rather drive it manually,
           open Betaflight Configurator's CLI tab yourself, run <code>serial</code> to see which style your
@@ -248,7 +248,7 @@
 │   ├── index.html           #   Home
 │   ├── setup.html           #   Setup Guide
 │   ├── webui.html           #   Field Web UI Guide
-│   ├── console.html         #   Web Serial bench console (the tool)
+│   ├── console.html         #   Web Serial Configurator (the tool)
 │   ├── reference.html       #   This page
 │   ├── style.css / app.js   #   Bench-console styling + Web Serial logic
 │   └── assets/               #   Shared site chrome (site.css / site.js)
@@ -307,7 +307,7 @@
           <li>✅ Camera registry with discovery scan + Pair &amp; Save</li>
           <li>✅ OTA firmware update from the Web UI</li>
           <li>✅ Wi-Fi power switch on a spare AUX channel</li>
-          <li>✅ Web Serial bench console (GitHub Pages, USB transport)</li>
+          <li>✅ Web Serial Configurator (GitHub Pages, USB transport)</li>
           <li>✅ Full DJI telemetry parse (battery %, rec time from DUML notifications)</li>
           <li>⬜ Lightweight MSP config panel ("configurator-lite" subtab)</li>
           <li>⬜ Profiles, camera configuration</li>

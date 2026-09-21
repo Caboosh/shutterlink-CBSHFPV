@@ -17,7 +17,7 @@ void serialConfigUpdate();
 /// Feed one byte that arrived on Serial1 (the FC UART) into the same
 /// JSON-line bench-config protocol, on top of (never instead of) whatever
 /// else already consumes that byte (the MSP parser in main.cpp's
-/// mspReadIncoming()). This is what lets the bench console be reached
+/// mspReadIncoming()). This is what lets the Configurator be reached
 /// through a Betaflight serial passthrough session targeting the UART
 /// wired to this board — no direct USB cable to the C3 required, just the
 /// FC's own USB port with passthrough engaged on that UART.

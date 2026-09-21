@@ -32,7 +32,7 @@
     <a href="index.html">Home</a>
     <a href="setup.html">Setup Guide</a>
     <a href="webui.html">Web UI Guide</a>
-    <a href="console.html">Bench Console</a>
+    <a href="console.html">Configurator</a>
     <a href="reference.html">Reference</a>
   </nav>
   <div class="header-actions">
@@ -81,7 +81,7 @@
             binds to the disconnected UART0 peripheral instead of the native USB-CDC your monitor is
             actually attached to. Symptom if this is ever missing: debug output still appears fine, but
             anything you <em>type</em> into the monitor is silently lost — this affects both the plain
-            debug console and the <a href="console.html">Web Serial bench console</a>.</p>
+            debug console and the <a href="console.html">Web Serial Configurator</a>.</p>
         </div>
       </section>
 
@@ -255,7 +255,7 @@ pio device monitor -b 115200</code></pre>
         <div class="notice ok">
           <svg><use href="#i-usb"/></svg>
           <p>Need to configure ShutterLink on the bench, without joining its Wi-Fi network? The
-            <a href="console.html">Web Serial Bench Console</a> talks to the board directly over USB, or
+            <a href="console.html">Web Serial Configurator</a> talks to the board directly over USB, or
             through a Betaflight serial passthrough once it's mounted in the quad. Full protocol details
             are in the <a href="reference.html">Reference</a> page.</p>
         </div>

@@ -1,5 +1,5 @@
 /* ============================================================================
-   ShutterLink Bench Console — component styles
+   ShutterLink Configurator — component styles
    Same glassmorphism tokens as assets/site.css (duplicated here so this file
    still works standalone). Every selector below matches what app.js expects —
    only the look changed, never the structure/classes/ids.
