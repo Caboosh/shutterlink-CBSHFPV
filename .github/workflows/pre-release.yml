@@ -32,6 +32,7 @@ jobs:
           path: .pio/build/esp32c3/
           
   create_release:
+    needs: build
     runs-on: ubuntu-latest
     permissions: write-all 
     steps:
