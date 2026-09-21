@@ -42,5 +42,4 @@ jobs:
             .pio/build/esp32c3/firmware.bin
           title: Pre-Release ${{ github.ref_name }}
           prerelease: true
-          token: ${{ secrets.GITHUB_TOKEN }}
   
