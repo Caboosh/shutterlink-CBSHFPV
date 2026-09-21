@@ -36,13 +36,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all 
     steps:
+      - name: Grab built Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: firmware.bin
+          
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v2.1.2-pre 
           name: v2.1.2-CBSHFPV Prerelease
-          files: |
-            .pio/build/esp32c3/firmware.bin
+          files: firmware.bin
           prerelease: true
           generate_release_notes: true
           token: ${{ github.token }}
