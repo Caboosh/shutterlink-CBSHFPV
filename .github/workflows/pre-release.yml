@@ -33,14 +33,16 @@ jobs:
           
   create_release:
     runs-on: ubuntu-latest
+    permissions: write-all 
     steps:
-      - name: Create Pre-Release
-        uses: nekofar/create-github-release@v1.0.15
+      - name: Release
+        uses: softprops/action-gh-release@v3
         with:
-          tag: ${{ github.ref_name }}
+          tag_name: v2.1.2-pre 
+          name: v2.1.2-CBSHFPV Prerelease
           files: |
             .pio/build/esp32c3/firmware.bin
-          title: Pre-Release ${{ github.ref_name }}
           prerelease: true
+          generate_release_notes: true
           token: ${{ github.token }}
   
