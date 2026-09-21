@@ -6,14 +6,21 @@
 // holds that logic ONCE so the two transports can never drift out of sync.
 // Every function here is transport-agnostic — plain strings/buffers in,
 // no WebServer or Serial calls inside it.
+//
+// PROTOTYPE: camera-type validity checks generalized from the old 2-way
+// (CAMERA_DJI / CAMERA_GOPRO) to the 3-way CameraType enum, and lastError
+// lookup now goes through camera_manager's new camGetLastError() instead of
+// calling each backend's own djiGetLastError()/gpGetLastError() directly —
+// this file no longer needs to include any individual backend header at
+// all, DJI or GoPro. This also means DJI Osmo Action is already selectable
+// via {"camera":2} (bench console / REST API) even before the Web UI grows
+// a third brand pill — see PROTOTYPE_NOTES.md.
 // ============================================================================
 
 #include "api_core.h"
 #include "config.h"
 #include "settings.h"
 #include "camera_manager.h"
-#include "dji_camera.h"
-#include "gopro_camera.h"
 #include "fc_status.h"
 #include "recorder.h"
 #include "osd_slots.h"
@@ -26,6 +33,10 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Status
 // ──────────────────────────────────────────────────────────────────────────────
+
+static bool cameraTypeValid(long t) {
+    return t == CAMERA_DJI_NANO || t == CAMERA_GOPRO || t == CAMERA_DJI_ACTION;
+}
 
 size_t apiBuildStatusJson(char *buf, size_t bufLen) {
     const CameraTelemetry &tel = camGetTelemetry();
@@ -68,7 +79,7 @@ size_t apiBuildStatusJson(char *buf, size_t bufLen) {
         size_t o = 0;
         o += snprintf(pending + o, sizeof(pending) - o, "[");
         for (uint8_t i = 0; i < n && o < sizeof(pending) - 80; i++) {
-            const char *typeStr = (sorted[i]->type == CAMERA_GOPRO) ? "GoPro" : "DJI";
+            const char *typeStr = cameraTypeName((CameraType)sorted[i]->type);
             char safeName[sizeof(sorted[i]->name)];
             strlcpy(safeName, sorted[i]->name, sizeof(safeName));
             for (char *q = safeName; *q; q++) {
@@ -81,11 +92,9 @@ size_t apiBuildStatusJson(char *buf, size_t bufLen) {
         if (o < sizeof(pending) - 1) snprintf(pending + o, sizeof(pending) - o, "]");
     }
 
-    const char *lastErr = "";
-    if (cfg.camera == CAMERA_DJI)  lastErr = djiGetLastError();
-    else if (cfg.camera == CAMERA_GOPRO) lastErr = gpGetLastError();
     char safeErr[64] = "";
     {
+        const char *lastErr = camGetLastError();
         size_t i = 0;
         for (; lastErr[i] && i < sizeof(safeErr) - 1; i++) {
             char ch = lastErr[i];
@@ -161,13 +170,12 @@ bool apiApplySettings(const String &body, bool &apNeedsRestart,
 
     if (jsonHas(body, "camera")) {
         long cam = jsonGetNum(body, "camera");
-        if (cam == CAMERA_GOPRO && cfg.camera != CAMERA_GOPRO) {
-            camSetCamera(CAMERA_GOPRO);
-        } else if (cam == CAMERA_DJI && cfg.camera != CAMERA_DJI) {
-            camSetCamera(CAMERA_DJI);
-        } else if (cam != CAMERA_DJI && cam != CAMERA_GOPRO) {
+        if (!cameraTypeValid(cam)) {
             if (errBuf) strlcpy(errBuf, "invalid camera type", errBufLen);
             return false;
+        }
+        if ((CameraType)cam != cfg.camera) {
+            camSetCamera((CameraType)cam);
         }
     }
 
@@ -297,7 +305,7 @@ bool apiApplyCamera(const String &body, bool &alreadyScanning,
             }
         }
 
-        if (type != CAMERA_DJI && type != CAMERA_GOPRO) {
+        if (!cameraTypeValid(type)) {
             if (errBuf) strlcpy(errBuf, "pair: mac and type required", errBufLen);
             return false;
         }

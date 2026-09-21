@@ -20,7 +20,7 @@
 #define SCAN_RESULT_TTL_MS    15000UL   // evict entries not seen for >15s
 
 struct ScanResult {
-    uint8_t type;               // CameraType (CAMERA_DJI / CAMERA_GOPRO)
+    uint8_t type;               // CameraType (CAMERA_DJI_NANO / CAMERA_GOPRO / CAMERA_DJI_ACTION)
     char    mac[18];            // "AA:BB:CC:DD:EE:FF"
     char    name[24];           // Advertised name (may be empty)
     int8_t  rssi;               // Signal strength in dBm
@@ -40,7 +40,7 @@ void scanResultsInit();
 void scanResultsStart();
 
 /// Called from BLE scan callbacks to record a discovered device.
-/// @param type Camera type (CAMERA_DJI / CAMERA_GOPRO)
+/// @param type Camera type (CAMERA_DJI_NANO / CAMERA_GOPRO / CAMERA_DJI_ACTION)
 /// @param mac MAC address string
 /// @param name Device name (may be empty)
 /// @param rssi Signal strength in dBm

@@ -14,7 +14,7 @@
 #include <Arduino.h>
 
 // Firmware version string (shown in UI and OTA status endpoint)
-#define FIRMWARE_VERSION "v2.1.1-CBSHFPV"
+#define FIRMWARE_VERSION "v2.2-CBSHFPV"
 
 // ──────────────────────────────────────────────────────────────────────────────
 // UART / MSP Configuration
@@ -62,8 +62,9 @@
 // Default User Settings (editable at runtime via Web UI / stored in NVS)
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Active camera backend: 0 = DJI Osmo Action, 1 = GoPro HERO8 and newer.
-#define DEFAULT_CAMERA_TYPE       CAMERA_DJI
+// Active camera backend: 0 = DJI Osmo Nano, 1 = GoPro HERO8 and newer,
+// 2 = DJI Osmo Action (assumed compatible, untested — see dji_action_camera.h).
+#define DEFAULT_CAMERA_TYPE       CAMERA_DJI_NANO
 
 // Zero-based index of the RC channel used as the "Record" switch.
 // In Betaflight, AUX1 = channel 5 (index 4), AUX4 = channel 8 (index 7), etc.

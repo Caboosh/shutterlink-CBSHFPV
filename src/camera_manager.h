@@ -2,7 +2,7 @@
 // camera_manager.h — Runtime camera backend dispatcher
 // ============================================================================
 // Owns the shared NimBLE stack and forwards calls to the active backend
-// (DJI Osmo / GoPro) selected in the Web UI.
+// (DJI Osmo Nano / DJI Osmo Action / GoPro) selected in the Web UI.
 // ============================================================================
 
 #ifndef CAMERA_MANAGER_H
@@ -27,8 +27,14 @@ const CameraTelemetry& camGetTelemetry();
 /// True when the active camera can accept commands right now.
 bool camIsReady();
 
-/// Human-readable name of the active backend ("DJI Osmo" / "GoPro").
+/// Human-readable name of the active backend ("DJI Osmo Nano" / "DJI Osmo
+/// Action" / "GoPro").
 const char* camGetName();
+
+/// Last connect-attempt error from the active backend (empty = no error).
+/// PROTOTYPE: added so api_core.cpp doesn't need to know about every
+/// backend's own GetLastError() individually.
+const char* camGetLastError();
 
 /// Switch camera brand at runtime (disconnects current backend, persists
 /// the choice).  Does NOT start a discovery scan — only changes which
@@ -41,8 +47,8 @@ void camKick();
 
 /// User-initiated discovery scan.  Switches the backend to the brand pill
 /// the user picked and calls that backend's startScan() once.  This is the
-/// ONLY entry point for a discovery scan — djiUpdate()/gpUpdate() will
-/// NOT auto-restart the scan after the 5 s window closes.
+/// ONLY entry point for a discovery scan — the per-model Update() functions
+/// will NOT auto-restart the scan after the 5 s window closes.
 void camStartUserScan();
 
 /// Disconnect current camera and stop any BLE operations (for UI disconnect).

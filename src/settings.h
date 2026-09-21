@@ -2,9 +2,9 @@
 // settings.h — Persistent runtime configuration (NVS via Preferences)
 // ============================================================================
 // Everything the user can change from the Web UI lives here and survives
-// reboots.  Defaults come from config.h.
+// reboots. Defaults come from config.h.
 //
-//   • Camera brand selection (DJI Osmo / GoPro HERO8+)
+//   • Camera brand selection (DJI Osmo Nano / DJI Osmo Action / GoPro HERO8+)
 //   • Record switch: RC channel index, threshold, debounce
 //   • Record-on-arm (+ optional stop on disarm)
 //   • Wi-Fi AP credentials for the Web UI
@@ -20,10 +20,17 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Camera brands
 // ──────────────────────────────────────────────────────────────────────────────
-
+// PROTOTYPE: split the old single CAMERA_DJI value into CAMERA_DJI_NANO
+// (hardware-verified) and CAMERA_DJI_ACTION (assumed compatible, untested —
+// see dji_action_camera.h). Existing numeric values are preserved for NVS
+// backward compatibility: anything already saved as camera=0 keeps meaning
+// exactly what it meant before (this project's actual paired camera, the
+// Nano) and camera=1 is untouched. CAMERA_DJI_ACTION is a new value (2), so
+// no migration is needed for existing saved settings/paired cameras.
 enum CameraType : uint8_t {
-    CAMERA_DJI   = 0,   // DJI Osmo Action family (DUML over BLE)
-    CAMERA_GOPRO = 1,   // GoPro HERO8+ (Open GoPro BLE API)
+    CAMERA_DJI_NANO   = 0,   // DJI Osmo Nano (DUML over BLE) — hardware-verified
+    CAMERA_GOPRO      = 1,   // GoPro HERO8+ (Open GoPro BLE API)
+    CAMERA_DJI_ACTION = 2,   // DJI Osmo Action family (DUML over BLE) — assumed compatible, untested
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -66,7 +73,7 @@ struct ShutterSettings {
     uint16_t   debounceMs;           // Switch debounce time
     bool       recordOnArm;          // Start recording when FC arms
     bool       stopOnDisarm;         // Stop recording when FC disarms (needs recordOnArm)
-    uint16_t   stopOnDisarmDelayMs;  // NEW — grace period before stop-on-disarm fires (0 = instant, old behaviour)
+    uint16_t   stopOnDisarmDelayMs;  // Grace period before stop-on-disarm fires (0 = instant)
     bool       scanAll;              // Accept any advertiser during discovery
                                      // (otherwise filters by MAC OUI / name / mfr)
     char       apSsid[33];           // SoftAP SSID for the Web UI
@@ -90,7 +97,7 @@ void settingsReset();
 /// Access the live settings struct.
 ShutterSettings& settingsGet();
 
-/// Human-readable name of a camera type ("DJI Osmo" / "GoPro").
+/// Human-readable name of a camera type ("DJI Osmo Nano" / "DJI Osmo Action" / "GoPro").
 const char* cameraTypeName(CameraType type);
 
 #endif // SETTINGS_H

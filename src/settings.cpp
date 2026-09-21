@@ -16,7 +16,7 @@ static void applyDefaults() {
     _s.debounceMs          = DEFAULT_RC_DEBOUNCE_MS;
     _s.recordOnArm         = DEFAULT_RECORD_ON_ARM;
     _s.stopOnDisarm        = DEFAULT_STOP_ON_DISARM;
-    _s.stopOnDisarmDelayMs = DEFAULT_STOP_ON_DISARM_DELAY_MS;   // NEW, Default Grace Period is 0ms, so instant stop of recording like the original behaviour
+    _s.stopOnDisarmDelayMs = DEFAULT_STOP_ON_DISARM_DELAY_MS;   // Default Grace Period is 0ms, so instant stop of recording like the original behaviour
     _s.scanAll             = DEFAULT_SCAN_ALL;
     _s.wifiSwitchCh        = DEFAULT_WIFI_SWITCH_CH;
 
@@ -115,5 +115,10 @@ ShutterSettings& settingsGet() {
 }
 
 const char* cameraTypeName(CameraType type) {
-    return (type == CAMERA_GOPRO) ? "GoPro" : "DJI Osmo";
+    switch (type) {
+        case CAMERA_GOPRO:      return "GoPro";
+        case CAMERA_DJI_ACTION: return "DJI Osmo Action";
+        case CAMERA_DJI_NANO:
+        default:                return "DJI Osmo Nano";
+    }
 }

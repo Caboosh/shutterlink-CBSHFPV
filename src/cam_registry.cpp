@@ -12,6 +12,10 @@
 // This fixes the "ghost device" bug: neighbour's cameras that the radio
 // briefly sees will appear in Card 3 as transient discovered devices, but
 // will NOT be silently written to flash.
+//
+// PROTOTYPE: cameraTypeValid() replaces the old two-way
+// `t != CAMERA_DJI && t != CAMERA_GOPRO` checks now that there are three
+// valid CameraType values (CAMERA_DJI_NANO / CAMERA_GOPRO / CAMERA_DJI_ACTION).
 // ============================================================================
 
 #include "cam_registry.h"
@@ -32,6 +36,10 @@ static struct {
 
 static ScanResult _discovered[MAX_SCAN_RESULTS];
 static uint8_t    _discoveredCount = 0;
+
+static bool cameraTypeValid(uint8_t t) {
+    return t == CAMERA_DJI_NANO || t == CAMERA_GOPRO || t == CAMERA_DJI_ACTION;
+}
 
 void camRegistryRemember(uint8_t type, const char *mac, const char *name) {
     if (!mac || !*mac) return;
@@ -83,7 +91,7 @@ void camRegistryLoad() {
         char key[10];
         snprintf(key, sizeof(key), "cT%d", i);
         uint8_t t = prefs.getUChar(key, 255);
-        if (t != CAMERA_DJI && t != CAMERA_GOPRO) continue;
+        if (!cameraTypeValid(t)) continue;
         snprintf(key, sizeof(key), "cM%d", i);
         String m = prefs.getString(key, "");
         if (!m.length()) continue;
@@ -147,7 +155,7 @@ void camRegistryClearDiscovered() {
 /// "Pair & Save" in the Web UI. Returns false on full registry or invalid MAC.
 bool camRegistrySave(uint8_t type, const char *mac, const char *name) {
     if (!mac || !*mac) return false;
-    if (type != CAMERA_DJI && type != CAMERA_GOPRO) return false;
+    if (!cameraTypeValid(type)) return false;
 
     ShutterSettings &s = settingsGet();
 
