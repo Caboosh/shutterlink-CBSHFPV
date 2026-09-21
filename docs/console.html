@@ -40,25 +40,6 @@
     <a class="iconbtn" href="https://github.com/Caboosh/shutterlink-CBSHFPV" target="_blank" rel="noopener" title="View on GitHub"><svg><use href="#i-github"/></svg></a>
   </div>
 </header>
-
-<header class="topbar">
-  <div class="brand">
-    <span class="dot" id="connDot"></span>
-    <h1>ShutterLink <span class="muted">Configurator</span></h1>
-  </div>
-    <div class="conn-controls">
-    <span id="connLabel" class="muted" style="margin: 23px 30px 0 0">Not connected</span>
-    <label>FC UART # (Ports tab, wired to the C3)
-      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
-    </label>
-    <label>Baud
-      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
-    </label>
-      <button id="btnConnectPassthrough" class="btn" style="margin-top: 23px">Connect (FC Passthrough)</button>
-      <button id="btnConnect" class="btn primary" style="margin-top: 23px">Connect over USB</button>
-      <button id="btnDisconnect" class="btn" style="margin-top: 23px" hidden>Disconnect</button>
-  </div>
-</header>
 <div class="notice" style="margin:14px 20px 0">
   <svg><use href="#i-usb"/></svg>
   <p>
@@ -69,6 +50,38 @@
     and Betaflight-passthrough mechanics.
   </p>
 </div>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="connDot"></span>
+    <h1 id="connLabel" class="muted">Not connected</h1>
+  </div>
+    <div class="conn-controls">
+    <label>FC UART # (Ports tab, wired to the C3)
+      <input type="number" id="fcUartNumber" min="1" max="20" step="1" placeholder="e.g. 3">
+    </label>
+    <label>Baud
+      <input type="number" id="fcUartBaud" min="9600" step="1" value="115200">
+    </label>
+      <button id="btnConnectPassthrough" class="btn" style="margin-top: 23px">Connect (BF Passthrough)</button>
+      <button id="btnConnect" class="btn primary" style="margin-top: 23px">Connect (C3 Direct)</button>
+      <button id="btnDisconnect" class="btn" style="margin-top: 23px" hidden>Disconnect</button>
+  </div>
+</header>
+<details class="passthrough-panel" id="passthroughPanel">
+  <summary>Why do we need to specify a UART?</summary>
+  <p style="max-width: 192ch;">
+    We can't guess which UART to use for the MSP Passthrough like ELRS Can for Receiver flashing, as depending on your quad setup and features the Flight Controller has you can have more than 
+    one MSP connection enabled on more than one UART.
+    <br><br>
+    You'll usually only ever have one ELRS Receiver connected to a UART, which is then set to 
+    SerialRx in the ports tab, so ELRS Configurator can look at serial and go "That one has 
+    SerialRx enabled, we'll use passthrough for that UART".
+    <br><br>
+    But we can't, as your VTX may communicate over MSP (HDZero Freestyle V2, for example), 
+    if your FC has bluetooth on board, that uses MSP to connect to the Betaflight App/Speedybee App, 
+    and of course, the C3 is using MSP as well.
+  </p>
+</details>
 
 <p class="unsupported" id="unsupportedNotice" hidden>
   Your browser doesn't support the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>.
