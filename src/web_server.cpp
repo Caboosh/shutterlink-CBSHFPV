@@ -18,8 +18,6 @@
 #include "config.h"
 #include "settings.h"
 #include "camera_manager.h"
-#include "dji_camera.h"
-#include "gopro_camera.h"
 #include "fc_status.h"
 #include "recorder.h"
 #include "osd_slots.h"
@@ -229,7 +227,17 @@ static void handleScanResults() {
     p += w; left -= w;
 
     // Field names match what the Web UI's renderDiscovered() reads:
-    // r.mac, r.n (name), r.t (type STRING 'GoPro'/'DJI'), r.rssi.
+    // r.mac, r.n (name), r.t (type STRING), r.rssi.
+    //
+    // PROTOTYPE NOTE: kept as the old GoPro/"DJI" catch-all on purpose —
+    // NOT changed to distinguish "DJI Osmo Nano" vs "DJI Osmo Action" here.
+    // web_assets.h's renderDiscovered() hardcodes `r.t==='GoPro'?1:0` when
+    // building the Pair & Save button's data-pair-type, so ANY non-GoPro
+    // label — however this string reads — is saved as type 0 (Nano). If
+    // this were changed to emit "DJI Osmo Action" without also updating
+    // that JS, the button would show a correct-looking label while
+    // silently mis-pairing an Action camera as a Nano in the registry.
+    // Left generic and safe until web_assets.h gets a real 3-way picker.
     for (uint8_t i = 0; i < n && left > 96; i++) {
         if (i > 0) { *p++ = ','; left--; }
 
@@ -257,19 +265,19 @@ static void handleScanResults() {
 
 static void handleOtaPost() {
     HTTPUpload& upload = _server.upload();
-    
+
     if (upload.status == UPLOAD_FILE_START) {
         Serial.printf("OTA Start: %s\n", upload.filename.c_str());
-        
+
         // Check firmware header (ESP32 magic byte)
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
             Serial.printf("OTA Begin Error: %s\n", Update.errorString());
             _server.sendHeader("Connection", "close");
-            _server.send(500, "application/json", 
+            _server.send(500, "application/json",
                 "{\"ok\":false,\"error\":\"Begin failed: " + String(Update.errorString()) + "\"}");
             return;
         }
-    } 
+    }
     else if (upload.status == UPLOAD_FILE_WRITE) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
             Serial.printf("OTA Write Error: %s\n", Update.errorString());
@@ -277,11 +285,11 @@ static void handleOtaPost() {
             _server.send(500, "application/json",
                 "{\"ok\":false,\"error\":\"Write failed: " + String(Update.errorString()) + "\"}");
         }
-    } 
+    }
     else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end(true)) {
             Serial.printf("OTA Success: %u bytes written\n", upload.totalSize);
-            _server.send(200, "application/json", 
+            _server.send(200, "application/json",
                 "{\"ok\":true,\"message\":\"Firmware updated! Rebooting...\"}");
             delay(1000);
             ESP.restart();
@@ -296,7 +304,7 @@ static void handleOtaPost() {
 
 static void handleOtaStatus() {
     char out[128];
-    snprintf(out, sizeof(out), 
+    snprintf(out, sizeof(out),
         "{\"ok\":true,\"version\":\"%s\",\"free_heap\":%lu}",
         FIRMWARE_VERSION, (unsigned long)ESP.getFreeHeap());
     _server.send(200, "application/json", out);
